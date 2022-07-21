@@ -3,7 +3,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 rep_path = '/Users/sdbykov/work/lockman_hole/'
-data_path = rep_path+'data/'
+data_path = rep_path+'0_data/'
 plot_path = rep_path+'results/plots/'
 
 ### matplitlib settings
