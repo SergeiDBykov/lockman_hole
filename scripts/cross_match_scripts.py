@@ -1,4 +1,4 @@
-from utils import data_path, set_mpl
+from .utils import data_path, set_mpl
 from tqdm import tqdm
 import pandas as pd
 pd.set_option('display.max_columns', 500)
@@ -80,3 +80,23 @@ def pandas_to_fits(dataframe: pd.DataFrame,
         file[1].header['SKYAREA'] = sky_area_deg2
         file.flush()
     return None
+
+
+
+
+def my_scaler_forward(df):
+    df_scaled = df.copy()
+    for col in ['mag_g',	'mag_r',	'mag_z',	'mag_w1',	'mag_w2', 'mag_w3', 'mag_w4' ]:
+        df_scaled[col] = df[col]/35
+    for col in ['col_gr',	'col_rz',	'col_zw1',	'col_rw2']:
+        df_scaled[col] = df[col]/10
+    return df_scaled
+
+def my_scaler_backward(df_scaled):
+    df = df_scaled.copy()
+    for col in ['mag_g',	'mag_r',	'mag_z',	'mag_w1',	'mag_w2', 'mag_w3', 'mag_w4' ]:
+        df[col] = df_scaled[col]*35
+    for col in ['col_gr',	'col_rz',	'col_zw1',	'col_rw2']:
+        df[col] = df_scaled[col]*10
+    return df
+
