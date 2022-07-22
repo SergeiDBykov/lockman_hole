@@ -33,6 +33,11 @@ def cat2hpx(lon: np.ndarray, lat: np.ndarray, nside: int, radec: bool = True) ->
     """
 
     npix = hp.nside2npix(nside)
+    map_resol_deg = np.rad2deg(hp.nside2resol(1024))
+    print(f'Resolution of the HEALPix map:')
+    print(f'{map_resol_deg} deg per pixel, or')
+    print(f'{map_resol_deg*60} arcmin per pixel, or')
+    print(f'{map_resol_deg*60*60} arcsec per pixel')
 
     if radec:
         eq = SkyCoord(lon, lat, frame="icrs", unit="deg")
@@ -64,7 +69,7 @@ def pandas_to_fits(dataframe: pd.DataFrame,
                     sky_area_deg2: float):
     """
     pandas_to_fits saves a pandas dataframe as a fits file with all columns. Saves to data_path + filename.fits
-
+    ##https://github.com/JohannesBuchner/nway/blob/master/nway-write-header.py
     Args:
         dataframe (pd.DataFrame): dataframe to save
         filename (str): filename (with path and .fits extension)
@@ -84,9 +89,12 @@ def pandas_to_fits(dataframe: pd.DataFrame,
 
 
 
+
+
+
 def my_scaler_forward(df):
     df_scaled = df.copy()
-    for col in ['mag_g',	'mag_r',	'mag_z',	'mag_w1',	'mag_w2', 'mag_w3', 'mag_w4' ]:
+    for col in ['mag_g',	'mag_r',	'mag_z',	'mag_w1',	'mag_w2' ]:
         df_scaled[col] = df[col]/35
     for col in ['col_gr',	'col_rz',	'col_zw1',	'col_rw2']:
         df_scaled[col] = df[col]/10
@@ -94,7 +102,7 @@ def my_scaler_forward(df):
 
 def my_scaler_backward(df_scaled):
     df = df_scaled.copy()
-    for col in ['mag_g',	'mag_r',	'mag_z',	'mag_w1',	'mag_w2', 'mag_w3', 'mag_w4' ]:
+    for col in ['mag_g',	'mag_r',	'mag_z',	'mag_w1',	'mag_w2', ]:
         df[col] = df_scaled[col]*35
     for col in ['col_gr',	'col_rz',	'col_zw1',	'col_rw2']:
         df[col] = df_scaled[col]*10
