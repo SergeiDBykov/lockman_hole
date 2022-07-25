@@ -63,6 +63,9 @@ def cat2hpx(lon: np.ndarray, lat: np.ndarray, nside: int, radec: bool = True) ->
 
 
 
+
+
+
 def pandas_to_fits(dataframe: pd.DataFrame,
                     filename: str,
                     table_header_name: str,
@@ -87,7 +90,15 @@ def pandas_to_fits(dataframe: pd.DataFrame,
     return None
 
 
+def fits_to_pandas(filename: str,):
+    data = Table.read(data_path+filename, format='fits')
+    with fits.open(data_path+'/'+filename , 'readonly') as file:
+        dataname = file[1].name
+    dataframe = data.to_pandas()
+    dataframe.reset_index(inplace=True)
+    dataframe.rename(columns={'index': dataname}, inplace=True)
 
+    return dataframe
 
 
 

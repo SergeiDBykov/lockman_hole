@@ -10,7 +10,7 @@ plot_path = rep_path+'results/plots/'
 
 # matplotlib.use('MacOSX') 
 rc = {
-    "figure.figsize": [10, 10],
+    "figure.figsize": [8, 8],
     "figure.dpi": 100,
     "savefig.dpi": 300,
     # fonts and text sizes

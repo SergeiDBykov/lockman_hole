@@ -1,4 +1,7 @@
 0_data
 z-old
+1_csc-desi-photo-prior/model/*
+2_LH-ero-desi-nway/non-api
+2_LH-ero-desi-nway/cache
 1_csc-desi-photo-prior/model/nn-prior.csv
 1_csc-desi-photo-prior/model/nn.joblib
