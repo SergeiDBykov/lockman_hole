@@ -2,6 +2,7 @@ from .utils import data_path, set_mpl
 from tqdm import tqdm
 import pandas as pd
 pd.set_option('display.max_columns', 500)
+pd.options.mode.chained_assignment = None
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -18,7 +19,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import GridSearchCV
 from tensorflow import keras
 import tensorflow as tf
-
+pd.options.mode.chained_assignment = None
 
 set_mpl()
 
@@ -290,7 +291,7 @@ def build_keras_model(input_features_shape,
 
 
 
-def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_bins_num = 1, features_cols = 'grzw1w2', validation_fraction = 0.3, test_fraction = 0.2, downsample_field_srcs = False, downsample_field_srcs_fraction = 2.0):
+def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_bins_num = 1, features_cols = 'grzw1w2', validation_fraction = 0.3, test_fraction = 0.2, downsample_field_srcs = False, downsample_field_srcs_fraction = 2.0, drop_missing = True):
     if features_cols == 'grzw1w2':
         features_cols = ['mag_g','mag_r','mag_z','mag_w1','mag_w2', 'col_gr', 'col_rz',  'col_gz','col_zw1', 'col_rw2', 'col_w1w2']
     elif features_cols == 'grz':
@@ -300,7 +301,10 @@ def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_b
 
     target_col = ['is_counterpart']
     photo_cat = photo_cat_scaled.copy()
-    photo_cat.dropna(subset = features_cols, how = 'any', inplace = True)
+    if drop_missing:
+        photo_cat.dropna(subset = features_cols, how = 'any', inplace = True)
+    else:
+        pass
     #assign random number to x_ray_flux_bin for each source which is not a counterpart
     tmp_col = np.random.randint(0, x_ray_flux_bins_num, len(photo_cat))
     photo_cat['x_ray_flux_bin'] = tmp_col
@@ -400,3 +404,100 @@ def save_keras_classifier(model, hist_df, model_name):
 
 
     hist_df.to_csv(model_name+'.csv', index=False, sep = '\t', header = ['#lo', 'hi', 'selected', 'others'])
+
+
+
+def find_completeness_purity_intercept(cutoffs, completeness, purity):
+
+    cutoff_intersection_id = np.argmin(np.abs(completeness[completeness>0] - purity[completeness>0]))
+    cutoff_intersection = cutoffs[completeness>0][cutoff_intersection_id]
+    completeness_intersection = completeness[completeness>0][cutoff_intersection_id]
+    purity_intersection = purity[completeness>0][cutoff_intersection_id]
+
+    return cutoff_intersection, completeness_intersection, purity_intersection
+
+def assess_goodnes_nway_cross_match(nway_res_ero):
+    test_columns = ['EROSITA','ID', 'pos_err', 'Separation_EROSITA_DESI',  'prob_has_match', 'prob_this_match', 'match_flag', 'desi_id',  'desi_id_true_ctp']
+    print("="*20)
+    print('NWAY PERFOMANCE ON THE VALIDATION CATALOG')
+    nway_res_ero = nway_res_ero.copy()
+    test_df = nway_res_ero[~nway_res_ero.desi_id_true_ctp.isna()]
+
+    test_df_matched = test_df.query('match_flag==1')
+
+    #tmp_col = test_df_matched.desi_id == test_df_matched.desi_id_true_ctp
+    test_df_matched['nway_equal_true'] = test_df_matched.desi_id == test_df_matched.desi_id_true_ctp
+    #test_df_matched.loc[tmp_col.values, 'nway_equal_true'] = tmp_col.values
+
+    cutoffs = np.linspace(0.01,0.99,100)
+
+    def calcu_stats(test_df_matched, cutoffs):
+        total_ctps = len(test_df_matched)
+        completeness = []
+        purity = []
+        for p in cutoffs:
+            cutoff_mask = test_df_matched.prob_has_match > p
+            true_check_mask = test_df_matched.nway_equal_true
+
+            n_assigned_ctps = len(test_df_matched[cutoff_mask])
+            if n_assigned_ctps == 0:
+                C = 0
+                P = 0
+            else:
+                true_assignment = len(test_df_matched[cutoff_mask & true_check_mask])
+                false_assingment = len(test_df_matched[cutoff_mask & ~true_check_mask])
+
+                C = n_assigned_ctps / total_ctps
+
+                P = true_assignment / n_assigned_ctps
+
+            completeness.append(C)
+            purity.append(P)
+        completeness = np.array(completeness)
+        purity = np.array(purity)
+        return cutoffs, completeness, purity
+
+    cutoffs, completeness, purity = calcu_stats(test_df_matched, cutoffs)
+
+    print('Completeness and purity for nway matching \n'+ 'completeness = fraction of sources with prob_has_match > p \n' + 'purity = fraction of sources with prob_has_match > p and correct nway assignment')
+
+    plt.figure(figsize=(8,5))
+    plt.plot(cutoffs, completeness, label='completeness')
+    plt.plot(cutoffs, purity, label='purity')
+
+    cutoff_intersection, completeness_intersection, purity_intersection = find_completeness_purity_intercept(cutoffs, completeness, purity)
+
+    frac_src_p_any_over = (nway_res_ero.prob_has_match > cutoff_intersection ).astype(int).mean()
+    frac_src_p_any_over = np.round(frac_src_p_any_over*100, 2)
+
+
+    plt.axvline(cutoff_intersection, color='k', ls='--', label=f'purity=completeness={completeness_intersection:.2g}%; \n {frac_src_p_any_over:.2g}% of sources have prob_has_match > {cutoff_intersection:.2g}')
+
+    plt.legend()
+    plt.ylim(0.5, 1.05)
+    plt.xlabel('prob_has_match cutoff')
+    plt.ylabel('completeness/purity')
+
+    print(f" Completeness = {100*completeness_intersection:.2g}% \n Purity = {100*purity_intersection:.2g}% \n prob_has_match optimal cutoff =  {cutoff_intersection:.2g} \n Fraction of sources with prob_has_match > {cutoff_intersection:.2g} = {frac_src_p_any_over:.2g}%")
+
+
+    cutoff_mask = test_df_matched.prob_has_match > cutoff_intersection
+    true_check_mask = test_df_matched.nway_equal_true
+
+    n_assigned_ctps = len(test_df_matched[cutoff_mask])
+
+    true_assignment = len(test_df_matched[cutoff_mask & true_check_mask])
+    false_assingment = len(test_df_matched[cutoff_mask & ~true_check_mask])
+
+    print('+++Statistics+++')
+    print(f"{len(test_df_matched)} X-ray sources in validation set with counterparts") 
+    print(f"--Out of those, {len(test_df_matched)-n_assigned_ctps} sources were assigned hostless (prob_has_match < {cutoff_intersection:.2g}) ")
+    print(f"{n_assigned_ctps} sources have prob_has_match > {cutoff_intersection:.2g}")
+    print(f'Out of those {n_assigned_ctps}: ')
+    print(f"--{true_assignment} sources have correct nway counterpart")
+    print(f"--{false_assingment} sources have incorrect nway counterpart")
+
+
+
+
+    return test_df[test_columns], cutoff_intersection
