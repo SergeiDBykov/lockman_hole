@@ -401,8 +401,6 @@ def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_b
 
 def save_keras_classifier(model, hist_df, model_name):
     model.save(model_name+'.keras_nn')
-
-
     hist_df.to_csv(model_name+'.csv', index=False, sep = '\t', header = ['#lo', 'hi', 'selected', 'others'])
 
 
@@ -416,7 +414,7 @@ def find_completeness_purity_intercept(cutoffs, completeness, purity):
 
     return cutoff_intersection, completeness_intersection, purity_intersection
 
-def assess_goodnes_nway_cross_match(nway_res_ero):
+def assess_goodnes_nway_cross_match(nway_res_ero, plot_res = True):
     test_columns = ['EROSITA','ID', 'pos_err', 'Separation_EROSITA_DESI',  'prob_has_match', 'prob_this_match', 'match_flag', 'desi_id',  'desi_id_true_ctp']
     print("="*20)
     print('NWAY PERFOMANCE ON THE VALIDATION CATALOG')
@@ -498,6 +496,7 @@ def assess_goodnes_nway_cross_match(nway_res_ero):
     print(f"--{false_assingment} sources have incorrect nway counterpart")
 
 
+    if not plot_res:
+        plt.close()
 
-
-    return test_df[test_columns], cutoff_intersection
+    return cutoff_intersection, completeness_intersection,  cutoffs, completeness, purity
