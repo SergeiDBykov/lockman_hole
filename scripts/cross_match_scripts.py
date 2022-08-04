@@ -131,7 +131,7 @@ def my_scaler_backward(df_scaled):
             df[col] = df_scaled[col]*10
 
 
-def assess_classifier(clf, X_test, y_test, label = 'Validation set'):  
+def assess_classifier(clf, X_test, y_test, label = 'Validation set', histbins = 30):  
     try:
         X_test = X_test.to_numpy()
         y_test = y_test.to_numpy()
@@ -190,7 +190,7 @@ def assess_classifier(clf, X_test, y_test, label = 'Validation set'):
 
 
     y_test = np.reshape(y_test, (-1,))
-    bins = np.linspace(0, 1, 50)
+    bins = np.linspace(0, 1, histbins)
     hist_field, bin_field = np.histogram(predict_proba[y_test==0], bins=bins, density=True)  
     hist_ctsp, bin_ctsp = np.histogram(predict_proba[y_test==1], bins=bins, density=True)
 
@@ -218,8 +218,12 @@ def plot_metrics(history, metrics = ['loss', 'purity', 'completeness']):
   for n, metric in enumerate(metrics):
     name = metric.replace("_"," ").capitalize()
     plt.figure(figsize=(8,5))
-    plt.plot(history.epoch, history.history[metric], label='Train')
-    plt.plot(history.epoch, history.history['val_'+metric], linestyle="--", label='Test')
+    try:
+        plt.plot(history.epoch, history.history[metric], label='Train')
+        plt.plot(history.epoch, history.history['val_'+metric], linestyle="--", label='Test')
+    except:
+        plt.plot(history['epoch'], history[metric], label='Train')
+        plt.plot(history['epoch'], history['val_'+metric], linestyle="--", label='Test')
     plt.xlabel('Epoch')
     plt.ylabel(name)
 
@@ -291,7 +295,7 @@ def build_keras_model(input_features_shape,
 
 
 
-def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_bins_num = 1, features_cols = 'grzw1w2', validation_fraction = 0.3, test_fraction = 0.2, downsample_field_srcs = False, downsample_field_srcs_fraction = 2.0, drop_missing = True):
+def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_bins_num = 1, features_cols = 'grzw1w2', validation_fraction = 0.3, test_fraction = 0.2, downsample_field_srcs = False, downsample_field_srcs_fraction = 2.0, drop_missing = True, random_state = 42):
     if features_cols == 'grzw1w2':
         features_cols = ['mag_g','mag_r','mag_z','mag_w1','mag_w2', 'col_gr', 'col_rz',  'col_gz','col_zw1', 'col_rw2', 'col_w1w2']
     elif features_cols == 'grz':
@@ -325,7 +329,7 @@ def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_b
 
 
 
-    photo_cat_validation, photo_cat_train_test = train_test_split(photo_cat, test_size=1-validation_fraction, stratify = photo_cat[target_col])
+    photo_cat_validation, photo_cat_train_test = train_test_split(photo_cat, test_size=1-validation_fraction, stratify = photo_cat[target_col], random_state = random_state)
 
 
     output_dict = {}
@@ -356,7 +360,7 @@ def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_b
         X = data[features_cols]
         y = data[target_col]
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_fraction, stratify = y)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_fraction, stratify = y, random_state = random_state+1)
 
 
         X_train = X_train.to_numpy()
