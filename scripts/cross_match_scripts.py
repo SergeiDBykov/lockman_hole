@@ -44,7 +44,7 @@ def cat2hpx(lon: np.ndarray, lat: np.ndarray, nside: int, radec: bool = True) ->
     """
 
     npix = hp.nside2npix(nside)
-    map_resol_deg = np.rad2deg(hp.nside2resol(1024))
+    map_resol_deg = np.rad2deg(hp.nside2resol(nside))
     print(f'Resolution of the HEALPix map:')
     print(f'{map_resol_deg} deg per pixel, or')
     print(f'{map_resol_deg*60} arcmin per pixel, or')
@@ -72,11 +72,163 @@ def cat2hpx(lon: np.ndarray, lat: np.ndarray, nside: int, radec: bool = True) ->
 
     return hpx_map
 
+def _add_at(a,index,b):
+    np.add.at(a,index,b)    
 
 
+def make_healpix_map(ra, dec, quantity, nside, mask=None, weight=None, ipix=None, fill_UNSEEN=False, return_w_maps=False, return_extra=False, mode='mean'):
+    """
+    Creates healpix maps of quantity observed at ra, dec (in degrees) by taking
+    the mean or sum of quantity in each pixel.
+    source: https://github.com/xuod/castor/blob/master/castor/cosmo.py
+    Parameters
+    ----------
+    ra : array
+        Right ascension.
+    dec : array
+        Declination.
+    quantity : array
+        `quantity` can be 2D, in which case several maps are created.
+    nside : int
+        `nside` parameter for healpix.
+    mask : array
+        If None, the mask is created and has value 1 in pixels that contain at
+        least one object, 0 elsewhere.
+    weight : type
+        Weights of objects (the default is None, in which case all objects have
+        weight 1). Must be the same size as `quantity`.
+    ipix : array
+        `ipix` should be the array of healpix pixel indices corresponding to the
+        input `ra` and `dec`. By default it is None and will be computed.
+    fill_UNSEEN : boolean
+        If `fill_UNSEEN` is True, pixels outside the mask are filled with
+        hp.UNSEEN, 0 otherwise (the default is False).
+    return_extra : boolean
+        If True, a dictionnary is returned that contains count statistics and
+        the masked `ipix` array to allow for statistics on the quantities to be
+        computed.
+    mode : string
+        Whether to return the 'mean' or 'sum' of quantity in each pixel.
+    Returns
+    -------
+    List of outmaps, the count map and the mask map.
+    """
+    npix = hp.nside2npix(nside)
+    map_resol_deg = np.rad2deg(hp.nside2resol(nside))
+    print(f'Resolution of the HEALPix map:')
+    print(f'{map_resol_deg} deg per pixel, or')
+    print(f'{map_resol_deg*60} arcmin per pixel, or')
+    print(f'{map_resol_deg*60*60} arcsec per pixel')
+    if quantity is not None:
+        quantity = np.atleast_2d(quantity)
+
+        if weight is not None:
+            w = np.atleast_2d(weight)
+            # Weights can also be the same for all quantities
+            # assert quantity.shape==weight.shape, "[make_healpix_map] quantity and weight must have the same shape"
+            if w.shape[0] > 1:
+                assert quantity.shape == w.shape, "[make_healpix_map] quantity/weight arrays don't have the same length"
+            else:
+                w = np.tile(w[0], (quantity.shape[0],1))
+
+            assert np.all(w > 0.), "[make_healpix_map] weight is not strictly positive"
+        else:
+            w = np.ones_like(quantity)
+
+        assert quantity.shape == w.shape, "[make_healpix_map] quantity/weight arrays don't have the same length"
+
+    npix = hp.nside2npix(nside)
+
+    if mask is not None:
+        assert len(mask)==npix, "[make_healpix_map] mask array does not have the right length"
+
+    # Value to fill outside the mask
+    x = hp.UNSEEN if fill_UNSEEN else 0.0
+
+    # Make sure mode is correct
+    assert (mode in ['sum','mean']), "[make_healpix_map] mode should be 'mean' or 'sum'"
+
+    count = np.zeros(npix, dtype=float)
+    outmaps = []
+    sum_w_maps = []
+
+    # Getting pixels for each object
+    if ipix is None:
+        assert len(ra) == len(dec), "[make_healpix_map] ra/dec arrays don't have the same length"
+        if quantity is not None:
+            assert len(ra) == quantity.shape[1]
+        ipix = hp.ang2pix(nside, (90.0-dec)/180.0*np.pi, ra/180.0*np.pi)
+    else:
+        if quantity is not None:
+            assert len(ipix) == quantity.shape[1], "[make_healpix_map] ipix has wrong size"
+
+    # Counting objects in pixels
+    np.add.at(count, ipix, 1.)
+    #_add_at_cst(count, ipix, 1.)
+
+    # Creating the mask if it does not exist
+    if mask is None:
+        bool_mask = (count > 0)
+    else:
+        bool_mask = mask.astype(bool)
+
+    # # Masking the count in the masked area
+    # count[np.logical_not(bool_mask)] = x
+    # if mask is None:
+    #     assert np.all(count[bool_mask] > 0), "[make_healpix_map] count[bool_mask] is not positive on the provided mask !"
+
+    # Create the maps
+    if quantity is not None:
+        for i in range(quantity.shape[0]):
+            sum_w = np.zeros(npix, dtype=float)
+            # np.add.at(sum_w, ipix, w[i,:])
+            _add_at(sum_w, ipix, w[i,:])
+
+            outmap = np.zeros(npix, dtype=float)
+            # np.add.at(outmap, ipix, quantity[i,:]*w[i,:])
+            _add_at(outmap, ipix, quantity[i,:]*w[i,:])
+
+            if mode=='mean':
+                outmap[bool_mask] /= sum_w[bool_mask]
+                
+            outmap[np.logical_not(bool_mask)] = x
+
+            outmaps.append(outmap)
+            if return_w_maps:
+                sum_w_maps.append(sum_w)
+
+    if mask is None:
+        returned_mask = bool_mask.astype(float)
+    else:
+        returned_mask = mask
+
+    res = [outmaps, count, returned_mask]
+
+    if return_w_maps:
+        res += [sum_w_maps]
+
+    if return_extra:
+        extra = {}
+        extra['count_tot_in_mask'] = np.sum(count[bool_mask])
+        extra['count_per_pixel_in_mask'] = extra['count_tot_in_mask'] * 1. / np.sum(bool_mask.astype(int))
+        extra['count_per_steradian_in_mask'] = extra['count_per_pixel_in_mask'] / hp.nside2pixarea(nside, degrees=False)
+        extra['count_per_sqdegree_in_mask'] = extra['count_per_pixel_in_mask'] / hp.nside2pixarea(nside, degrees=True)
+        extra['count_per_sqarcmin_in_mask'] = extra['count_per_sqdegree_in_mask'] / 60.**2
+        extra['ipix_masked'] = np.ma.array(ipix, mask=bool_mask[ipix])
+
+        res += [extra]
+
+    return res
+#
 
 
-
+def decode_str_columns(df):
+    str_df = df.select_dtypes([object])
+    str_df = str_df.stack().str.decode('utf-8').unstack()
+    for col in str_df:
+        df[col] = str_df[col]
+    return df
+    
 def pandas_to_fits(dataframe: pd.DataFrame,
                     filename: str,
                     table_header_name: str,
@@ -105,7 +257,9 @@ def fits_to_pandas(filename: str,):
     data = Table.read(data_path+filename, format='fits')
     with fits.open(data_path+'/'+filename , 'readonly') as file:
         dataname = file[1].name
-    dataframe = data.to_pandas()
+    #the next is to handle multi-dimensional columns
+    names = [name for name in data.colnames if len(data[name].shape) <= 1]
+    dataframe = data[names].to_pandas()
     dataframe.reset_index(inplace=True)
     dataframe.rename(columns={'index': dataname}, inplace=True)
 
