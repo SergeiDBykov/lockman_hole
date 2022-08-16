@@ -235,17 +235,17 @@ def pandas_to_fits(dataframe: pd.DataFrame,
                     sky_area_deg2: float):
     """
     pandas_to_fits saves a pandas dataframe as a fits file with all columns. Saves to data_path + filename.fits
-    ##https://github.com/JohannesBuchner/nway/blob/master/nway-write-header.py
+    ##https://github.com/JohannesBuchner/srgz/blob/master/srgz-write-header.py
     Args:
         dataframe (pd.DataFrame): dataframe to save
         filename (str): filename (with path and .fits extension)
         table_header_name (str): header of the table, e.g. eROSITA-LHC
-        sky_area_deg2 (float): sky area of the survey (needed for NWAY)
+        sky_area_deg2 (float): sky area of the survey (needed for srgz)
     """
     table = Table.from_pandas(dataframe)
     table.write(data_path+'/'+filename, overwrite = True)
 
-    #https://github.com/JohannesBuchner/nway/blob/master/nway-write-header.py
+    #https://github.com/JohannesBuchner/srgz/blob/master/srgz-write-header.py
     with fits.open(data_path+'/'+filename , 'update') as file:
         file[1].name = table_header_name
         file[1].header['SKYAREA'] = sky_area_deg2
@@ -652,6 +652,91 @@ def assess_goodnes_nway_cross_match(nway_res_ero, plot_res = True):
     print(f'Out of those {n_assigned_ctps}: ')
     print(f"--{true_assignment} sources have correct nway counterpart")
     print(f"--{false_assingment} sources have incorrect nway counterpart")
+
+
+    if not plot_res:
+        plt.close()
+
+    return cutoff_intersection, completeness_intersection,  cutoffs, completeness, purity
+
+
+
+def assess_goodnes_srgz_cross_match(srgz_res_ero, plot_res = True):
+    print("="*20)
+    print('SRGz PERFOMANCE ON THE VALIDATION CATALOG')
+    srgz_res_ero = srgz_res_ero.copy()
+    test_df_matched = srgz_res_ero[~srgz_res_ero.desi_id_true_ctp.isna()]
+
+    test_df_matched.iloc[:, 'srgz_equal_true'] = test_df_matched.desi_id == test_df_matched.desi_id_true_ctp
+
+
+    cutoffs = np.linspace(0.01,srgz_res_ero['P_0'].max,100)
+
+    def calcu_stats(test_df_matched, cutoffs):
+        total_ctps = len(test_df_matched)
+        completeness = []
+        purity = []
+        for p in cutoffs:
+            cutoff_mask = test_df_matched.prob_has_match > p
+            true_check_mask = test_df_matched.srgz_equal_true
+
+            n_assigned_ctps = len(test_df_matched[cutoff_mask])
+            if n_assigned_ctps == 0:
+                C = 0
+                P = 0
+            else:
+                true_assignment = len(test_df_matched[cutoff_mask & true_check_mask])
+                false_assingment = len(test_df_matched[cutoff_mask & ~true_check_mask])
+
+                C = n_assigned_ctps / total_ctps
+
+                P = true_assignment / n_assigned_ctps
+
+            completeness.append(C)
+            purity.append(P)
+        completeness = np.array(completeness)
+        purity = np.array(purity)
+        return cutoffs, completeness, purity
+
+    cutoffs, completeness, purity = calcu_stats(test_df_matched, cutoffs)
+
+    print('Completeness and purity for srgz matching \n'+ 'completeness = fraction of sources with prob_has_match > p \n' + 'purity = fraction of sources with prob_has_match > p and correct srgz assignment')
+
+    plt.figure(figsize=(8,5))
+    plt.plot(cutoffs, completeness, label='completeness')
+    plt.plot(cutoffs, purity, label='purity')
+
+    cutoff_intersection, completeness_intersection, purity_intersection = find_completeness_purity_intercept(cutoffs, completeness, purity)
+
+    frac_src_p_any_over = (srgz_res_ero.prob_has_match > cutoff_intersection ).astype(int).mean()
+    frac_src_p_any_over = np.round(frac_src_p_any_over*100, 2)
+
+
+    plt.axvline(cutoff_intersection, color='k', ls='--', label=f'purity=completeness={completeness_intersection:.2g}%; \n {frac_src_p_any_over:.2g}% of sources have prob_has_match > {cutoff_intersection:.2g}')
+
+    plt.legend()
+    plt.ylim(0.5, 1.05)
+    plt.xlabel('prob_has_match cutoff')
+    plt.ylabel('completeness/purity')
+
+    print(f" Completeness = {100*completeness_intersection:.2g}% \n Purity = {100*purity_intersection:.2g}% \n prob_has_match optimal cutoff =  {cutoff_intersection:.2g} \n Fraction of sources with prob_has_match > {cutoff_intersection:.2g} = {frac_src_p_any_over:.2g}%")
+
+
+    cutoff_mask = test_df_matched.prob_has_match > cutoff_intersection
+    true_check_mask = test_df_matched.srgz_equal_true
+
+    n_assigned_ctps = len(test_df_matched[cutoff_mask])
+
+    true_assignment = len(test_df_matched[cutoff_mask & true_check_mask])
+    false_assingment = len(test_df_matched[cutoff_mask & ~true_check_mask])
+
+    print('+++Statistics+++')
+    print(f"{len(test_df_matched)} X-ray sources in validation set with counterparts") 
+    print(f"--Out of those, {len(test_df_matched)-n_assigned_ctps} sources were assigned hostless (prob_has_match < {cutoff_intersection:.2g}) ")
+    print(f"{n_assigned_ctps} sources have prob_has_match > {cutoff_intersection:.2g}")
+    print(f'Out of those {n_assigned_ctps}: ')
+    print(f"--{true_assignment} sources have correct srgz counterpart")
+    print(f"--{false_assingment} sources have incorrect srgz counterpart")
 
 
     if not plot_res:
