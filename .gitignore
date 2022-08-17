@@ -1,7 +1,7 @@
 0_data
 z-old
-1_csc-desi-photo-prior/model/*
-1_csc-desi-photo-prior/old_stuff
-2_LH-ero-desi-nway/non-api
-2_LH-ero-desi-nway/cache
-1_csc-desi-photo-prior/model/
+1_desi-photo-prior/model/*
+1_desi-photo-prior/old_stuff
+1_desi-photo-prior/model/
+2_desi-crossmatch/cache
+3_desi-identification/old_stuff
