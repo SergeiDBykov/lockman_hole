@@ -268,21 +268,28 @@ def fits_to_pandas(filename: str,):
 
 def my_scaler_forward(df):
     df_scaled = df.copy()
-    for col in df.columns:
-        if col.startswith('mag_'):
-            df_scaled[col] = df[col]/35
-        elif col.startswith('col_'):
-            df_scaled[col] = df[col]/10
-
+    for colname in df.columns:
+        if 'rel_dered_mag' in colname:
+            print(colname, 'scaled by 1/35')
+            df_scaled[colname] = df[colname]/35
+        elif 'rel_dered' in colname and 'mag_' not in colname:
+            print(colname, 'scaled by 1/10')
+            df_scaled[colname] = df[colname]/10
+        else:
+            df_scaled[colname] = df[colname]
     return df_scaled
 
 def my_scaler_backward(df_scaled):
     df = df_scaled.copy()
-    for col in df.columns:
-        if col.startswith('mag_'):
-            df[col] = df_scaled[col]*35
-        elif col.startswith('col_'):
-            df[col] = df_scaled[col]*10
+    for colname in df.columns:
+        if 'rel_dered_mag' in colname:
+            df[colname] = df_scaled[colname]*35
+        elif 'rel_dered' in colname and 'mag_' not in colname:
+            df[colname] = df_scaled[colname]*10
+        else:
+            df[colname] = df_scaled[colname]
+    print('data unscaled: rel_dered_mag for mags,  rel_dered and not mag_ for colors')
+    return df
 
 
 def assess_classifier(clf, X_test, y_test, label = 'Validation set', histbins = 30):  
@@ -312,35 +319,62 @@ def assess_classifier(clf, X_test, y_test, label = 'Validation set', histbins = 
 
 
     precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_test, predict_proba)
+    precision = precision[:-1]
+    recall = recall[:-1]
+    #recall is TP / (TP + FN) - We know it as  completeness  -> number of true positives / all positives
+    #precision is TP / (TP + FP) - We know it as purity -> number of samples that are correctly classified out of all classified samples
 
-    #recall is TP / (TP + FN) - We know it as purity -> number of true positives / number of all positives
-    #precision is TP / (TP + FP) - We know it as completeness -> number of samples that are correctly classified out of all classified samples
 
-    fig,  ax =  plt.subplots( figsize = (8,8))
-    ax.plot(precision, recall, label=label, linewidth=2)
-    ax.set_xlabel('Precision/completeness')
-    ax.set_ylabel('Recall/putiry')
+
+    fig,  ax =  plt.subplots( figsize = (9,5))
+    ax.plot(thresholds, precision , label=label+':putiry', linewidth=2)
+    ax.plot(thresholds,recall , label=label+':completeness', linewidth=2)
+    ax.set_xlabel('classifier output')
+    ax.set_ylabel('completeness/purity')
     plt.grid(True)
-    ax.set_aspect('equal')
     id_optim = np.argmin(np.abs(precision-recall))
     threshold_optim = thresholds[id_optim]
     precision_optim = precision[id_optim]
     recall_optim = recall[id_optim]
     print('Optimal threshold: {:.2f}'.format(threshold_optim))
     print('Optimal precision: {:.2f}'.format(precision_optim))
-    ax.plot(precision_optim, recall_optim, 'o', color='C5', label = f"({precision_optim:.2f},{recall_optim:.2f})")
-    ax.plot([0,1], [0,1], '--', color='C4')
+    ax.axvline(threshold_optim, color='C5', label = f"({precision_optim:.2f},{recall_optim:.2f})")
 
     cm = sklearn.metrics.confusion_matrix(y_test, predict_proba > threshold_optim)
 
     cm_str = f"TN: {cm[0,0]}  FP: {cm[0,1]}\nFN: {cm[1,0]}  TP: {cm[1,1]}"
     #add a string version of the confusion matrix, add true positive , false positive  etc labels
-    
-
-
 
     ax.text(0.3, 0.15, cm_str, ha='center', va='center', transform=ax.transAxes)
-    ax.legend()
+    ax.legend(loc = 'lower right')
+
+
+
+
+
+
+    # fig,  ax =  plt.subplots( figsize = (8,8))
+    # ax.plot(precision, recall, label=label, linewidth=2)
+    # ax.set_xlabel('Precision/completeness')
+    # ax.set_ylabel('Recall/putiry')
+    # plt.grid(True)
+    # ax.set_aspect('equal')
+    # id_optim = np.argmin(np.abs(precision-recall))
+    # threshold_optim = thresholds[id_optim]
+    # precision_optim = precision[id_optim]
+    # recall_optim = recall[id_optim]
+    # print('Optimal threshold: {:.2f}'.format(threshold_optim))
+    # print('Optimal precision: {:.2f}'.format(precision_optim))
+    # ax.plot(precision_optim, recall_optim, 'o', color='C5', label = f"({precision_optim:.2f},{recall_optim:.2f})")
+    # ax.plot([0,1], [0,1], '--', color='C4')
+
+    # cm = sklearn.metrics.confusion_matrix(y_test, predict_proba > threshold_optim)
+
+    # cm_str = f"TN: {cm[0,0]}  FP: {cm[0,1]}\nFN: {cm[1,0]}  TP: {cm[1,1]}"
+    # #add a string version of the confusion matrix, add true positive , false positive  etc labels
+
+    # ax.text(0.3, 0.15, cm_str, ha='center', va='center', transform=ax.transAxes)
+    # ax.legend()
 
 
     y_test = np.reshape(y_test, (-1,))
@@ -451,11 +485,13 @@ def build_keras_model(input_features_shape,
 
 def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_bins_num = 1, features_cols = 'grzw1w2', validation_fraction = 0.3, test_fraction = 0.2, downsample_field_srcs = False, downsample_field_srcs_fraction = 2.0, drop_missing = True, random_state = 42):
     if features_cols == 'grzw1w2':
-        features_cols = ['mag_g','mag_r','mag_z','mag_w1','mag_w2', 'col_gr', 'col_rz',  'col_gz','col_zw1', 'col_rw2', 'col_w1w2']
+        features_cols = ['rel_dered_mag_g','rel_dered_mag_r','rel_dered_mag_z','rel_dered_mag_w1','rel_dered_mag_w2', 'rel_dered_g_r', 'rel_dered_r_z',  'rel_dered_g_z','rel_dered_z_w1', 'rel_dered_r_w2', 'rel_dered_w1_w2']
+    if features_cols == 'grzw1':
+        features_cols = ['rel_dered_mag_g','rel_dered_mag_r','rel_dered_mag_z','rel_dered_mag_w1', 'rel_dered_g_r', 'rel_dered_r_z',  'rel_dered_g_z','rel_dered_z_w1']
     elif features_cols == 'grz':
-        features_cols = ['mag_g','mag_r','mag_z', 'col_gr', 'col_rz', 'col_gz']
+        features_cols = ['rel_dered_mag_g','rel_dered_mag_r','rel_dered_mag_z', 'rel_dered_g_r', 'rel_dered_r_z', 'rel_dered_g_z']
     elif features_cols == 'grzw1w2w3w4':
-        features_cols = ['mag_g','mag_r','mag_z','mag_w1','mag_w2', 'mag_w3', 'mag_w4', 'col_gr', 'col_rz', 'col_gz','col_zw1', 'col_rw2', 'col_w1w2', 'col_zw3', 'col_rw4', 'col_w3w4']
+        features_cols = ['rel_dered_mag_g','rel_dered_mag_r','rel_dered_mag_z','rel_dered_mag_w1','rel_dered_mag_w2', 'rel_dered_mag_w3', 'rel_dered_mag_w4', 'rel_dered_g_r', 'rel_dered_r_z', 'rel_dered_g_z','rel_dered_z_w1', 'rel_dered_r_w2', 'rel_dered_w1_w2', 'rel_dered_z_w3', 'rel_dered_r_w4', 'rel_dered_w3_w4']
 
     target_col = ['is_counterpart']
     photo_cat = photo_cat_scaled.copy()
@@ -468,7 +504,7 @@ def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_b
     photo_cat['x_ray_flux_bin'] = tmp_col
     
 
-    flux_bin_num, flux_bins = pd.qcut(photo_cat[photo_cat.is_counterpart].flux_csc_05_2,  x_ray_flux_bins_num, retbins = True, labels = False)
+    flux_bin_num, flux_bins = pd.qcut(photo_cat[photo_cat.is_counterpart].csc_flux_05_2,  x_ray_flux_bins_num, retbins = True, labels = False)
     photo_cat[photo_cat.is_counterpart]['x_ray_flux_bin'] = flux_bin_num
 
     print('total x-ray sources: ',len(photo_cat[photo_cat.is_counterpart]))
@@ -743,3 +779,151 @@ def assess_goodnes_srgz_cross_match(srgz_res_ero, plot_res = True):
         plt.close()
 
     return cutoff_intersection, completeness_intersection,  cutoffs, completeness, purity
+
+
+
+def flux2mag(flux):
+
+    return 22.5 - 2.5 * np.log10(flux)
+
+def flux_nmagg2vega_mag(flux:pd.Series,
+                        mode:str) -> pd.Series:
+    """
+    Converts DESI w1 flux (in nanomaggies) to
+    vega magnitudes.
+    
+    https://www.legacysurvey.org/dr9/description/
+    """
+    if mode=='w1':
+        delta_m = 2.699
+    elif mode=='w2':
+        delta_m = 3.339
+    elif mode=='w3':
+        delta_m = 5.174
+    elif mode=='w4':
+        delta_m = 6.620
+    
+    vega_flux = flux * 10 ** (delta_m / 2.5)
+    vega_mag = flux2mag(vega_flux)
+    vega_mag = vega_mag.replace([np.inf, -np.inf], np.nan)
+    
+    return vega_mag
+
+
+def flux_frequency_correction(magnitudes: pd.Series,
+                              w_eff: float,
+                              ab_zeropoint: float) -> pd.Series:
+    """
+    Converts magnitudes obtainded from nanomaggies (erg/cm²/Hz)
+    to flux in erg/cm²/s.
+    http://svo2.cab.inta-csic.es/theory/fps/index.php?id=CTIO/DECam.z&&mode=browse&gname=CTIO&gname2=DECam#filter
+    Args:
+        magnitudes (pd.Series): Magnitudes in AB system.
+        w_eff (float): width of the effective wavelength.
+        ab_zeropoint (float): Zero Point in AB System.
+    Returns:
+        pd.Series: _description_
+    """
+
+    flux = w_eff * ab_zeropoint * 10 ** (-0.4 * magnitudes)
+    flux.name = 'flux_corrected'
+
+    return flux
+
+
+def desi_reliable_magnitudes(df: pd.DataFrame,
+                        s_n_threshold: int = 4,
+                        colors: bool=True,
+                        ) -> pd.DataFrame:
+    """
+    sources: https://github.com/mbelveder/luminosity_LH/blob/9f4837cb509c780e1c3db79b05c9cc0cd4932c2c/lh_functions.py#L372
+    Calculate reliable magnitudes only for objects with reliable flux measurments.
+    
+    https://www.legacysurvey.org/dr9/description/:
+    "The fluxes can be negative for faint objects, and indeed we expect
+    many such cases for the faintest objects."
+    Args:
+        df (pd.DataFrame): DESI catalogue.
+        s_n_threshold (int): S/N threshold.
+        colors (bool): If True, calculate colors.
+    Returns:
+        pd.DataFrame: Catalogue with reliable magnitudes.
+    """
+    df = df.copy()
+    for band in ['g', 'r', 'z', 'w1', 'w2', 'w3', 'w4']:
+
+        flux_colname = f'flux_{band}'
+        flux_ivar_colname = f'flux_ivar_{band}'
+        dered_mag_colname = f'dered_mag_{band}'
+
+
+        # All magnitudes (unreliable included)
+        df[f'all_mag_{band}'] = flux2mag(df[flux_colname])
+        
+        # Select only reliable fluxes (allows avoiding correction on noise)
+        flux_sn = df[flux_colname].abs() * np.sqrt(df[flux_ivar_colname])
+        reliable_flux = pd.Series(np.where(flux_sn > s_n_threshold, df[flux_colname], np.nan))
+        # df[f'rel_flux_{band}'] = reliable_flux
+
+        # Calculate reliable magnitudes
+        df[f'rel_mag_{band}'] = flux2mag(reliable_flux)
+        df[f'rel_mag_{band}'] = df[f'rel_mag_{band}'].replace([np.inf, -np.inf], np.nan)
+
+        # Reliable dereddended magnitudes
+        df[f'rel_dered_mag_{band}'] = np.where(
+            flux_sn > s_n_threshold, df[dered_mag_colname], np.nan
+            )
+
+        # Reliable Vega magnitudes for WISE fluxes
+        if 'w' in band:
+            df[f'vega_mag_{band}'] = flux_nmagg2vega_mag(reliable_flux, mode=band)
+
+    W_EFF_Z = 1289.35
+    AB_ZEROPOINT_Z = 1.29484e-9
+
+    df['rel_desi_flux_corr_z'] = flux_frequency_correction(df['rel_dered_mag_z'],
+                                                           w_eff=W_EFF_Z,
+                                                           ab_zeropoint=AB_ZEROPOINT_Z)
+
+    if colors:
+        #g-z, g-z, r-z all dered
+        df['rel_dered_g_r'] = df['rel_dered_mag_g'] - df['rel_dered_mag_r']
+        df['rel_dered_g_z'] = df['rel_dered_mag_g'] - df['rel_dered_mag_z']
+        df['rel_dered_r_z'] = df['rel_dered_mag_r'] - df['rel_dered_mag_z']
+
+
+        #z-w1, r-w2, w1-w2 all dered
+        df['rel_dered_z_w1'] = df['rel_dered_mag_z'] - df['rel_dered_mag_w1']
+        df['rel_dered_r_w2'] = df['rel_dered_mag_r'] - df['rel_dered_mag_w2']
+        df['rel_dered_w1_w2'] = df['rel_dered_mag_w1'] - df['rel_dered_mag_w2']
+        
+
+        #z-w3, r-w4, w3-w4 all dered
+        df['rel_dered_z_w3'] = df['rel_dered_mag_z'] - df['rel_dered_mag_w3']
+        df['rel_dered_r_w4'] = df['rel_dered_mag_r'] - df['rel_dered_mag_w4']
+        df['rel_dered_w3_w4'] = df['rel_dered_mag_w3'] - df['rel_dered_mag_w4']
+
+
+
+
+    # if xray:
+    #     # X-ray to optical flux
+    #     df['lg(Fx/Fo_g)'] = np.log10(df['flux_05-20'] / df['flux_g'])
+    #     df['lg(Fx/Fo_r)'] = np.log10(df['flux_05-20'] / df['flux_r'])
+    #     df['lg(Fx/Fo_z)'] = np.log10(df['flux_05-20'] / df['flux_z'])
+
+    #     '''
+    #     TODO: update with datalab data when possible
+    #     '''
+
+    #     dered_flux_z = 10 ** (9 - df['rel_dered_mag_z'] / 2.5)
+    #     df['rel_dered_lg(Fx/Fo_z)'] = np.log10(df['flux_05-20'] / dered_flux_z)
+    #     df['rel_dered_lg(Fx/Fo_z_corr)'] = np.log10(df['flux_05-20'] / df['rel_desi_flux_corr_z'])
+
+    #     dered_flux_g = 10 ** (9 - df['rel_dered_mag_g'] / 2.5)
+    #     df['rel_dered_lg(Fx/Fo_g)'] = np.log10(df['flux_05-20'] / dered_flux_g)
+
+    #     dered_flux_r = 10 ** (9 - df['rel_dered_mag_r'] / 2.5)
+    #     df['rel_dered_lg(Fx/Fo_r)'] = np.log10(df['flux_05-20'] / dered_flux_r)
+
+    return df
