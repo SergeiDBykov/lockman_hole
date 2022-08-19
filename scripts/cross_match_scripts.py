@@ -8,8 +8,11 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from astropy.table import Table 
 from astropy.coordinates import SkyCoord
+from astropy import coordinates 
 import astropy.io.fits as fits
+import astropy.units as u
 import healpy as hp
+from scipy import stats
 
 import sklearn
 from sklearn.model_selection import train_test_split
@@ -927,3 +930,118 @@ def desi_reliable_magnitudes(df: pd.DataFrame,
     #     df['rel_dered_lg(Fx/Fo_r)'] = np.log10(df['flux_05-20'] / dered_flux_r)
 
     return df
+
+
+
+def rayleigh_plot(input_cross_match_df, sep_col = 'sep', pos_err_col = 'pos_err',
+    pos_err_corr_func = lambda x: x, corr_error_str='err*1.0', plotlabel = 'eROSITAx',
+    xlim=(0, 3), ylim=(1e-3, 1)): 
+    '''
+    input_cross_match_df - dataframe with cross-matched catalog 1 with catalog 2.
+    all cuts and queries should be done before calling this function.
+    '''
+
+    pos_err = pos_err_corr_func(input_cross_match_df[pos_err_col])
+    corrected_pos_err = pos_err
+
+    rat = input_cross_match_df[sep_col]/corrected_pos_err
+
+    rayleigh_fit = stats.rayleigh.fit(rat)
+    #sns.histplot(ero_ctps_tmp, x = rat, bins=50, stat = 'density', ax = ax)
+
+    fig, axs =  plt.subplots(nrows=2, ncols = 1, sharex = True, gridspec_kw = {'hspace':0, 'height_ratios': None}, figsize = (12,12))
+    ax, ax2 = axs
+    sns.ecdfplot(input_cross_match_df, x = rat, ax = ax, complementary = True, lw = 3)
+    sns.histplot(input_cross_match_df, x = rat, ax = ax2, stat = 'density', lw = 3, bins = 50)
+
+    for prob in [39.3, 68, 95, 98]:
+        ax.axhline(1 - prob/100, color = 'k', ls = '--', alpha = 0.5)
+        ax.text(0.5, 1 - prob/100, f'{prob}%', ha = 'center', va = 'center', color = 'k', alpha = 0.5)
+
+
+    #plot the fit
+    x = np.linspace(0, rat.max()*1.05, 100)
+    ax.plot(x, 1-stats.rayleigh.cdf(x, *rayleigh_fit), 'r-', lw=3, alpha=0.6, label='Rayleigh fit: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % rayleigh_fit, zorder = -1)
+    ax.plot(x, 1-stats.rayleigh.cdf(x, 0,1), 'g-', lw=3, alpha=0.6, label='Rayleigh fixed: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % (0,1), zorder = -1)
+    ax.set(ylim=ylim, xlim=xlim)
+    ax2.set_xlabel('Separation/corrected_pos_err; \n '+ 'corr_error='+corr_error_str)
+    ax.set_yscale('log')
+
+    ax2.plot(x, stats.rayleigh.pdf(x, *rayleigh_fit), 'r-', lw=3, alpha=0.6, label='Rayleigh fit: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % rayleigh_fit, zorder = -1)
+    ax2.plot(x, stats.rayleigh.pdf(x, 0,1), 'g-', lw=3, alpha=0.6, label='Rayleigh fixed: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % (0,1), zorder = -1)
+
+    plt.legend()
+    plt.suptitle(plotlabel+', '+str(len(input_cross_match_df))+' sources')
+
+
+
+
+def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame, 
+                            colname_ra1: str, colname_dec1: str,
+                            colname_ra2: str, colname_dec2: str,
+                            match_radius: float = 3.0,
+                            df_prefix: str = '',
+                            closest: bool = False,
+                            ):
+    """
+    cross_match_data_frames cross-matches two dataframes.
+    Cross-match two dataframes with astropy
+    https://docs.astropy.org/en/stable/api/astropy.coordinates.match_coordinates_sky.html#astropy.coordinates.match_coordinates_sky
+    https://docs.astropy.org/en/stable/api/astropy.coordinates.search_around_sky.html#astropy.coordinates.search_around_sky
+    Args:
+        df1 (pd.DataFrame): first catalog
+        df2 (pd.DataFrame): second catalog
+        colname_ra1 (str): columns name for ra in df1
+        colname_dec1 (str): columns name for dec in df1
+        colname_ra2 (str): columns name for ra in df2
+        colname_dec2 (str): columns name for dec in df2
+        match_radius (float, optional): match radius in arcsec. Defaults to 3.0.
+        df_prefix (str, optional): prefix to prepend to the columns of the second data frame. Defaults to ''.
+        closest (bool, optional): whether to return the closest match. Defaults to False.
+
+    Returns:
+        pd.DataFrame: match of df1 and df2
+
+
+    example:
+    cross_match_data_frames(desi, gaia, 
+                                colname_ra1='RA_fin',
+                                colname_dec1='DEC_fin',
+                                colname_ra2='ra',
+                                colname_dec2='dec',
+                                match_radius = 10,
+                                df_prefix = 'GAIA',
+                                closest=False)
+    """
+    df1 = df1.copy()
+    orig_size = df1.shape[0]
+    df2 = df2.copy()
+    df1.reset_index(inplace=True)
+    df2.reset_index(inplace=True)
+
+    coors1 = SkyCoord(df1[colname_ra1]*u.degree, df1[colname_dec1]*u.degree, frame='icrs')
+    coors2 = SkyCoord(df2[colname_ra2]*u.degree, df2[colname_dec2]*u.degree, frame='icrs')
+
+    idx1, idx2, ang_sep, _ = coordinates.search_around_sky(coors1, coors2, match_radius*u.arcsec)
+
+    ang_sep = pd.DataFrame({df_prefix+'_sep': ang_sep})
+
+    df1 = df1.loc[idx1]
+    df1.reset_index(drop=True, inplace=True)
+    df2 = df2.loc[idx2]
+    df2.reset_index(drop=True, inplace=True)
+    df2.columns  = [df_prefix+'_'+x for x in df2.columns]
+    df_matched = pd.concat([df1,ang_sep, df2], axis=1) 
+    df_matched.sort_values(by=['index', df_prefix+'_sep'], inplace=True, ascending=True)
+
+    print('cross-match radius', match_radius, 'arcsec')
+    print('total matches:', len(df_matched), 'out of', orig_size)
+
+    if closest:
+        df_matched = df_matched.drop_duplicates(subset=['index'], keep='first')
+        print('total closest matches:', len(df_matched))
+
+    df_matched.drop(columns=['index'], inplace=True)
+    df_matched.drop(columns=[df_prefix+'_index'], inplace=True)
+
+    return df_matched                  
