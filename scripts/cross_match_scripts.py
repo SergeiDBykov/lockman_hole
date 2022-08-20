@@ -980,7 +980,7 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
                             colname_ra1: str, colname_dec1: str,
                             colname_ra2: str, colname_dec2: str,
                             match_radius: float = 3.0,
-                            df_prefix: str = '',
+                            df_prefix: str = 'matched',
                             closest: bool = False,
                             ):
     """
@@ -1019,10 +1019,10 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
     df1.reset_index(inplace=True)
     df2.reset_index(inplace=True)
 
-    coors1 = SkyCoord(df1[colname_ra1]*u.degree, df1[colname_dec1]*u.degree, frame='icrs')
-    coors2 = SkyCoord(df2[colname_ra2]*u.degree, df2[colname_dec2]*u.degree, frame='icrs')
+    coords1 = SkyCoord(ra = df1[colname_ra1]*u.degree, dec = df1[colname_dec1]*u.degree)
+    coords2 = SkyCoord(ra = df2[colname_ra2]*u.degree, dec = df2[colname_dec2]*u.degree)
 
-    idx1, idx2, ang_sep, _ = coordinates.search_around_sky(coors1, coors2, match_radius*u.arcsec)
+    idx1, idx2, ang_sep, _ = coordinates.search_around_sky(coords1, coords2, match_radius*u.arcsec)
 
     ang_sep = pd.DataFrame({df_prefix+'_sep': ang_sep})
 
@@ -1043,5 +1043,27 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
 
     df_matched.drop(columns=['index'], inplace=True)
     df_matched.drop(columns=[df_prefix+'_index'], inplace=True)
+
+    return df_matched                  
+
+
+
+
+def search_around_r_data_frames(df1: pd.DataFrame, target_ra: float, target_dec: float,
+                            colname_ra1: str, colname_dec1: str,
+                            match_radius: float = 3.0,
+                            closest: bool = False,
+                            ):
+
+    df2 = pd.DataFrame({'RA': [target_ra], 'DEC': [target_dec]})
+    df_matched = cross_match_data_frames(df1, df2,
+                                colname_ra1=colname_ra1,
+                                colname_dec1=colname_dec1,
+                                colname_ra2='RA',
+                                colname_dec2='DEC',
+                                match_radius=match_radius,
+                                df_prefix='',
+                                closest=closest,
+                                )
 
     return df_matched                  
