@@ -611,6 +611,11 @@ def find_completeness_purity_intercept(cutoffs, completeness, purity):
 
     return cutoff_intersection, completeness_intersection, purity_intersection
 
+
+
+
+
+
 def assess_goodnes_nway_cross_match(nway_res_ero, plot_res = True):
     test_columns = ['EROSITA','ID', 'pos_err', 'Separation_EROSITA_DESI',  'prob_has_match', 'prob_this_match', 'match_flag', 'desi_id',  'desi_id_true_ctp']
     print("="*20)
@@ -624,23 +629,24 @@ def assess_goodnes_nway_cross_match(nway_res_ero, plot_res = True):
     test_df_matched['nway_equal_true'] = test_df_matched.desi_id == test_df_matched.desi_id_true_ctp
     #test_df_matched.loc[tmp_col.values, 'nway_equal_true'] = tmp_col.values
 
-    cutoffs = np.linspace(0.01,0.99,100)
-
+    cutoffs = np.linspace(0.02,0.98,100)
     def calcu_stats(test_df_matched, cutoffs):
         total_ctps = len(test_df_matched)
         completeness = []
         purity = []
         for p in cutoffs:
-            cutoff_mask = test_df_matched.prob_has_match > p
-            true_check_mask = test_df_matched.nway_equal_true
+            test_df_matched_tmp = test_df_matched.copy()
 
-            n_assigned_ctps = len(test_df_matched[cutoff_mask])
+            cutoff_mask = test_df_matched_tmp.prob_has_match > p
+            true_check_mask = test_df_matched_tmp.nway_equal_true
+
+            n_assigned_ctps = len(test_df_matched_tmp[cutoff_mask])
             if n_assigned_ctps == 0:
                 C = 0
                 P = 0
             else:
-                true_assignment = len(test_df_matched[cutoff_mask & true_check_mask])
-                false_assingment = len(test_df_matched[cutoff_mask & ~true_check_mask])
+                true_assignment = len(test_df_matched_tmp[cutoff_mask & true_check_mask])
+                false_assingment = len(test_df_matched_tmp[cutoff_mask & ~true_check_mask])
 
                 C = n_assigned_ctps / total_ctps
 
@@ -782,6 +788,147 @@ def assess_goodnes_srgz_cross_match(srgz_res_ero, plot_res = True):
         plt.close()
 
     return cutoff_intersection, completeness_intersection,  cutoffs, completeness, purity
+
+
+
+
+
+
+def assess_goodnes_of_cross_match(match_df,
+                                 match_flag_col='match_flag',
+                                 candidate_col = 'desi_id',
+                                 true_ctps_col = 'desi_id_true_ctp',
+                                 calib_col = 'prob_has_match'):
+
+    match_df_orig  = match_df.copy()
+    match_df = match_df.copy()
+    match_df = match_df[match_df[match_flag_col]==1]
+    match_df = match_df.query(f"~{true_ctps_col}.isna()")
+
+    for col in [candidate_col, true_ctps_col]:
+        #decode utf-8 to ascii
+        match_df[col] = match_df[col].str.decode('utf-8')
+
+
+
+    n_ctps = len(match_df)
+    n_ctps_not_hostless = len(match_df[match_df[true_ctps_col]!='hostless'])
+    n_ctps_hostless = n_ctps - n_ctps_not_hostless
+
+    def make_cut(match_df_in, cutoff):
+        match_df_out = match_df_in.copy()
+        cut_mask = match_df_out.eval(f"{calib_col}>{cutoff}")
+        match_df_out.loc[~cut_mask, candidate_col] = 'hostless'
+
+        return match_df_out
+
+
+    def calc_stats(match_df, match_df_orig,  verbose = False, for_hostless = False):
+        match_df = match_df.copy()
+        if for_hostless:
+            match_df_tmp = match_df.query(f"{true_ctps_col}=='hostless'")
+            #if verbose: print(match_df_tmp[[true_ctps_col, candidate_col]])
+
+            assigned = match_df_tmp.query(f"{candidate_col}=='hostless'")
+            
+            assigned_with_correct_ctps = assigned.query(f"{true_ctps_col}=={candidate_col}")
+            total = match_df_orig.query(f"{true_ctps_col}=='hostless'")
+
+            n_assigned = len(assigned)
+            n_assigned_with_correct_ctps = len(assigned_with_correct_ctps)
+            n_total = len(total)
+            if n_assigned==0:
+                purity = 0
+            else:
+                purity = n_assigned_with_correct_ctps/n_assigned
+            completeness = n_assigned/n_total
+
+            if verbose:
+                print(' HOSTLESS ')
+                print(f"assigned HOSTLESS: {n_assigned}")
+                print(f"assigned HOSTLESS correctly: {n_assigned_with_correct_ctps}")
+                print(f"total HOSTLESS: {n_total}")
+                print(f"purity [assigned HOSTLESS correctly / all assigned HOSTLESS]: {purity}")
+                print(f"completeness [all HOSTLESS assigned / total HOSTLESS]: {completeness}")
+        else:
+            match_df_tmp = match_df.query(f"{true_ctps_col}!='hostless'")
+            assigned = match_df_tmp.query(f"{candidate_col}!='hostless'")
+            assigned_with_correct_ctps = assigned.query(f"{true_ctps_col}=={candidate_col}")
+            total = match_df_orig.query(f"{true_ctps_col}!='hostless'")
+
+            n_assigned = len(assigned)
+            n_assigned_with_correct_ctps = len(assigned_with_correct_ctps)
+            n_total = len(total)
+
+            purity = n_assigned_with_correct_ctps/n_assigned
+            completeness = n_assigned/n_total
+
+            if verbose:
+                print(' NOT HOSTLESS ')
+                print(f"assigned NOT HOSTLESS: {n_assigned}")
+                print(f"assigned NOT HOSTLESS with correct match: {n_assigned_with_correct_ctps}")
+                print(f"total: {n_total}")
+                print(f"purity [assigned NOT HOSTLESS correctly / all NOT HOSTLESS]: {purity}")
+                print(f"completeness [all NOT HOSTLESS / total NOT HOSTLESS]: {completeness}")
+        
+
+        return purity, completeness
+        
+
+    purity_not_hostless_arr = []
+    completeness_not_hostless_arr = []
+    purity_hostless_arr = []
+    completeness_hostless_arr = []
+
+    cutoffs = np.linspace(0.02,0.98,100)
+    for cutoff in cutoffs:
+        match_df_cut = make_cut(match_df, cutoff)
+        purity_not_hostless, completeness_not_hostless = calc_stats(match_df_cut, match_df, verbose=False, for_hostless = False)
+        purity_hostless, completeness_hostless = calc_stats(match_df_cut, match_df, verbose = False, for_hostless = True)
+
+        purity_not_hostless_arr.append(purity_not_hostless)
+        completeness_not_hostless_arr.append(completeness_not_hostless)
+        purity_hostless_arr.append(purity_hostless)
+        completeness_hostless_arr.append(completeness_hostless)
+
+    purity_not_hostless_arr = np.array(purity_not_hostless_arr)
+    completeness_not_hostless_arr = np.array(completeness_not_hostless_arr)
+    purity_hostless_arr = np.array(purity_hostless_arr)
+    completeness_hostless_arr = np.array(completeness_hostless_arr)
+
+
+    cutoff_intersection, completeness_intersection, purity_intersection = find_completeness_purity_intercept(cutoffs, completeness_not_hostless_arr, purity_not_hostless_arr)
+
+
+
+    frac_src_p_any_over = (match_df_orig[calib_col] > cutoff_intersection ).astype(int).mean()
+    frac_src_p_any_over = np.round(frac_src_p_any_over*100, 2)
+
+
+    plt.figure(figsize=(9,6))
+    plt.plot(cutoffs, purity_not_hostless_arr, 'b-',  label='purity [not hostless]')
+    plt.plot(cutoffs, completeness_not_hostless_arr, 'b--', label='completeness [not hostless]')
+    plt.plot(cutoffs, purity_hostless_arr, 'r-', label='purity [hostless]')
+    plt.plot(cutoffs, completeness_hostless_arr, 'r--', label='completeness [hostless]')
+    plt.legend()
+    plt.xlabel(calib_col+' cutoff')
+    plt.ylabel('purity/completeness')
+
+
+
+    plt.axvline(cutoff_intersection, color='k', ls='--', label=f'purity=completeness={completeness_intersection:.2g}%; \n {frac_src_p_any_over:.2g}% of sources have prob_has_match > {cutoff_intersection:.2g}')
+
+
+    print(f" Completeness = {100*completeness_intersection:.2g}% \n Purity = {100*purity_intersection:.2g}% \n {calib_col} optimal cutoff =  {cutoff_intersection:.2g} \n Fraction of sources with prob_has_match > {cutoff_intersection:.2g} = {frac_src_p_any_over:.2g}%")
+
+
+
+    calc_stats(make_cut(match_df, cutoff_intersection), match_df, verbose = True, for_hostless = False)
+    calc_stats(make_cut(match_df, cutoff_intersection), match_df, verbose = True, for_hostless = True)
+
+    plt.ylim(0, 1.1)
+
+    return match_df
 
 
 
