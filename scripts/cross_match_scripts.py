@@ -26,6 +26,7 @@ pd.options.mode.chained_assignment = None
 
 set_mpl()
 
+
 def cat2hpx(lon: np.ndarray, lat: np.ndarray, nside: int, radec: bool = True) -> np.ndarray:
     """
     https://stackoverflow.com/questions/50483279/make-a-2d-histogram-with-healpix-pixellization-using-healpy
@@ -1161,7 +1162,9 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
                                 closest=False)
     """
     df1 = df1.copy()
-    orig_size = df1.shape[0]
+    orig_size_1 = df1.shape[0]
+    orig_size_2 = df2.shape[0]
+
     df2 = df2.copy()
     df1.reset_index(inplace=True)
     df2.reset_index(inplace=True)
@@ -1170,7 +1173,7 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
     coords2 = SkyCoord(ra = df2[colname_ra2]*u.degree, dec = df2[colname_dec2]*u.degree)
 
     idx1, idx2, ang_sep, _ = coordinates.search_around_sky(coords1, coords2, match_radius*u.arcsec)
-
+    ang_sep = ang_sep.to(u.arcsec)
     ang_sep = pd.DataFrame({df_prefix+'_sep': ang_sep})
 
     df1 = df1.loc[idx1]
@@ -1182,7 +1185,7 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
     df_matched.sort_values(by=['index', df_prefix+'_sep'], inplace=True, ascending=True)
 
     print('cross-match radius', match_radius, 'arcsec')
-    print('total matches:', len(df_matched), 'out of', orig_size)
+    print('total matches:', len(df_matched), 'out of', orig_size_1, 'x' ,orig_size_2)
 
     if closest:
         df_matched = df_matched.drop_duplicates(subset=['index'], keep='first')
