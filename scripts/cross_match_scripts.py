@@ -799,7 +799,8 @@ def assess_goodnes_of_cross_match(match_df,
                                  match_flag_col='match_flag',
                                  candidate_col = 'desi_id',
                                  true_ctps_col = 'desi_id_true_ctp',
-                                 calib_col = 'prob_has_match'):
+                                 calib_col = 'prob_has_match',
+                                 plot_res = True):
 
     match_df_orig  = match_df.copy()
     match_df = match_df.copy()
@@ -905,31 +906,30 @@ def assess_goodnes_of_cross_match(match_df,
     frac_src_p_any_over = (match_df_orig[calib_col] > cutoff_intersection ).astype(int).mean()
     frac_src_p_any_over = np.round(frac_src_p_any_over*100, 2)
 
+    if plot_res:
+        plt.figure(figsize=(9,6))
+        plt.plot(cutoffs, purity_not_hostless_arr, 'b-',  label='purity [not hostless]')
+        plt.plot(cutoffs, completeness_not_hostless_arr, 'b--', label='completeness [not hostless]')
+        plt.plot(cutoffs, purity_hostless_arr, 'r-', label='purity [hostless]')
+        plt.plot(cutoffs, completeness_hostless_arr, 'r--', label='completeness [hostless]')
+        plt.legend()
+        plt.xlabel(calib_col+' cutoff')
+        plt.ylabel('purity/completeness')
 
-    plt.figure(figsize=(9,6))
-    plt.plot(cutoffs, purity_not_hostless_arr, 'b-',  label='purity [not hostless]')
-    plt.plot(cutoffs, completeness_not_hostless_arr, 'b--', label='completeness [not hostless]')
-    plt.plot(cutoffs, purity_hostless_arr, 'r-', label='purity [hostless]')
-    plt.plot(cutoffs, completeness_hostless_arr, 'r--', label='completeness [hostless]')
-    plt.legend()
-    plt.xlabel(calib_col+' cutoff')
-    plt.ylabel('purity/completeness')
-
-
-
-    plt.axvline(cutoff_intersection, color='k', ls='--', label=f'purity=completeness={completeness_intersection:.2g}%; \n {frac_src_p_any_over:.2g}% of sources have prob_has_match > {cutoff_intersection:.2g}')
+        plt.axvline(cutoff_intersection, color='k', ls='--', label=f'purity=completeness={completeness_intersection:.2g}%; \n {frac_src_p_any_over:.2g}% of sources have prob_has_match > {cutoff_intersection:.2g}')
 
 
-    print(f" Completeness = {100*completeness_intersection:.2g}% \n Purity = {100*purity_intersection:.2g}% \n {calib_col} optimal cutoff =  {cutoff_intersection:.2g} \n Fraction of sources with prob_has_match > {cutoff_intersection:.2g} = {frac_src_p_any_over:.2g}%")
-
-
+        print(f" Completeness = {100*completeness_intersection:.2g}% \n Purity = {100*purity_intersection:.2g}% \n {calib_col} optimal cutoff =  {cutoff_intersection:.2g} \n Fraction of sources with prob_has_match > {cutoff_intersection:.2g} = {frac_src_p_any_over:.2g}%")
+        plt.ylim(0, 1.1)
+        plt.show()
+    else:
+        pass
 
     calc_stats(make_cut(match_df, cutoff_intersection), match_df, verbose = True, for_hostless = False)
     calc_stats(make_cut(match_df, cutoff_intersection), match_df, verbose = True, for_hostless = True)
 
-    plt.ylim(0, 1.1)
 
-    return match_df
+    return cutoffs, completeness_not_hostless_arr, purity_not_hostless_arr, completeness_hostless_arr, purity_hostless_arr, match_df
 
 
 

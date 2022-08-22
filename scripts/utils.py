@@ -13,7 +13,7 @@ def set_mpl(palette = 'shap', desat = 0.8):
     # matplotlib.use('MacOSX') 
     rc = {
         "figure.figsize": [8, 8],
-        "figure.dpi": 300,
+        "figure.dpi": 100,
         "savefig.dpi": 300,
         # fonts and text sizes
         #'font.family': 'sans-serif',
