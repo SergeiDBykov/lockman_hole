@@ -621,181 +621,6 @@ def find_completeness_purity_intercept(cutoffs, completeness, purity):
 
 
 
-def assess_goodnes_nway_cross_match(nway_res_ero, plot_res = True):
-    test_columns = ['EROSITA','ID', 'pos_err', 'Separation_EROSITA_DESI',  'prob_has_match', 'prob_this_match', 'match_flag', 'desi_id',  'desi_id_true_ctp']
-    print("="*20)
-    print('NWAY PERFOMANCE ON THE VALIDATION CATALOG')
-    nway_res_ero = nway_res_ero.copy()
-    test_df = nway_res_ero[~nway_res_ero.desi_id_true_ctp.isna()]
-
-    test_df_matched = test_df.query('match_flag==1')
-
-    #tmp_col = test_df_matched.desi_id == test_df_matched.desi_id_true_ctp
-    test_df_matched['nway_equal_true'] = test_df_matched.desi_id == test_df_matched.desi_id_true_ctp
-    #test_df_matched.loc[tmp_col.values, 'nway_equal_true'] = tmp_col.values
-
-    cutoffs = np.linspace(0.02,0.98,100)
-    def calcu_stats(test_df_matched, cutoffs):
-        total_ctps = len(test_df_matched)
-        completeness = []
-        purity = []
-        for p in cutoffs:
-            test_df_matched_tmp = test_df_matched.copy()
-
-            cutoff_mask = test_df_matched_tmp.prob_has_match > p
-            true_check_mask = test_df_matched_tmp.nway_equal_true
-
-            n_assigned_ctps = len(test_df_matched_tmp[cutoff_mask])
-            if n_assigned_ctps == 0:
-                C = 0
-                P = 0
-            else:
-                true_assignment = len(test_df_matched_tmp[cutoff_mask & true_check_mask])
-                false_assingment = len(test_df_matched_tmp[cutoff_mask & ~true_check_mask])
-
-                C = n_assigned_ctps / total_ctps
-
-                P = true_assignment / n_assigned_ctps
-
-            completeness.append(C)
-            purity.append(P)
-        completeness = np.array(completeness)
-        purity = np.array(purity)
-        return cutoffs, completeness, purity
-
-    cutoffs, completeness, purity = calcu_stats(test_df_matched, cutoffs)
-
-    print('Completeness and purity for nway matching \n'+ 'completeness = fraction of sources with prob_has_match > p \n' + 'purity = fraction of sources with prob_has_match > p and correct nway assignment')
-
-    plt.figure(figsize=(8,5))
-    plt.plot(cutoffs, completeness, label='completeness')
-    plt.plot(cutoffs, purity, label='purity')
-
-    cutoff_intersection, completeness_intersection, purity_intersection = find_completeness_purity_intercept(cutoffs, completeness, purity)
-
-    frac_src_p_any_over = (nway_res_ero.prob_has_match > cutoff_intersection ).astype(int).mean()
-    frac_src_p_any_over = np.round(frac_src_p_any_over*100, 2)
-
-
-    plt.axvline(cutoff_intersection, color='k', ls='--', label=f'purity=completeness={completeness_intersection:.2g}%; \n {frac_src_p_any_over:.2g}% of sources have prob_has_match > {cutoff_intersection:.2g}')
-
-    plt.legend()
-    plt.ylim(0.5, 1.05)
-    plt.xlabel('prob_has_match cutoff')
-    plt.ylabel('completeness/purity')
-
-    print(f" Completeness = {100*completeness_intersection:.2g}% \n Purity = {100*purity_intersection:.2g}% \n prob_has_match optimal cutoff =  {cutoff_intersection:.2g} \n Fraction of sources with prob_has_match > {cutoff_intersection:.2g} = {frac_src_p_any_over:.2g}%")
-
-
-    cutoff_mask = test_df_matched.prob_has_match > cutoff_intersection
-    true_check_mask = test_df_matched.nway_equal_true
-
-    n_assigned_ctps = len(test_df_matched[cutoff_mask])
-
-    true_assignment = len(test_df_matched[cutoff_mask & true_check_mask])
-    false_assingment = len(test_df_matched[cutoff_mask & ~true_check_mask])
-
-    print('+++Statistics+++')
-    print(f"{len(test_df_matched)} X-ray sources in validation set with counterparts") 
-    print(f"--Out of those, {len(test_df_matched)-n_assigned_ctps} sources were assigned hostless (prob_has_match < {cutoff_intersection:.2g}) ")
-    print(f"{n_assigned_ctps} sources have prob_has_match > {cutoff_intersection:.2g}")
-    print(f'Out of those {n_assigned_ctps}: ')
-    print(f"--{true_assignment} sources have correct nway counterpart")
-    print(f"--{false_assingment} sources have incorrect nway counterpart")
-
-
-    if not plot_res:
-        plt.close()
-
-    return cutoff_intersection, completeness_intersection,  cutoffs, completeness, purity
-
-
-
-def assess_goodnes_srgz_cross_match(srgz_res_ero, plot_res = True):
-    print("="*20)
-    print('SRGz PERFOMANCE ON THE VALIDATION CATALOG')
-    srgz_res_ero = srgz_res_ero.copy()
-    test_df_matched = srgz_res_ero[~srgz_res_ero.desi_id_true_ctp.isna()]
-
-    test_df_matched.iloc[:, 'srgz_equal_true'] = test_df_matched.desi_id == test_df_matched.desi_id_true_ctp
-
-
-    cutoffs = np.linspace(0.01,srgz_res_ero['P_0'].max,100)
-
-    def calcu_stats(test_df_matched, cutoffs):
-        total_ctps = len(test_df_matched)
-        completeness = []
-        purity = []
-        for p in cutoffs:
-            cutoff_mask = test_df_matched.prob_has_match > p
-            true_check_mask = test_df_matched.srgz_equal_true
-
-            n_assigned_ctps = len(test_df_matched[cutoff_mask])
-            if n_assigned_ctps == 0:
-                C = 0
-                P = 0
-            else:
-                true_assignment = len(test_df_matched[cutoff_mask & true_check_mask])
-                false_assingment = len(test_df_matched[cutoff_mask & ~true_check_mask])
-
-                C = n_assigned_ctps / total_ctps
-
-                P = true_assignment / n_assigned_ctps
-
-            completeness.append(C)
-            purity.append(P)
-        completeness = np.array(completeness)
-        purity = np.array(purity)
-        return cutoffs, completeness, purity
-
-    cutoffs, completeness, purity = calcu_stats(test_df_matched, cutoffs)
-
-    print('Completeness and purity for srgz matching \n'+ 'completeness = fraction of sources with prob_has_match > p \n' + 'purity = fraction of sources with prob_has_match > p and correct srgz assignment')
-
-    plt.figure(figsize=(8,5))
-    plt.plot(cutoffs, completeness, label='completeness')
-    plt.plot(cutoffs, purity, label='purity')
-
-    cutoff_intersection, completeness_intersection, purity_intersection = find_completeness_purity_intercept(cutoffs, completeness, purity)
-
-    frac_src_p_any_over = (srgz_res_ero.prob_has_match > cutoff_intersection ).astype(int).mean()
-    frac_src_p_any_over = np.round(frac_src_p_any_over*100, 2)
-
-
-    plt.axvline(cutoff_intersection, color='k', ls='--', label=f'purity=completeness={completeness_intersection:.2g}%; \n {frac_src_p_any_over:.2g}% of sources have prob_has_match > {cutoff_intersection:.2g}')
-
-    plt.legend()
-    plt.ylim(0.5, 1.05)
-    plt.xlabel('prob_has_match cutoff')
-    plt.ylabel('completeness/purity')
-
-    print(f" Completeness = {100*completeness_intersection:.2g}% \n Purity = {100*purity_intersection:.2g}% \n prob_has_match optimal cutoff =  {cutoff_intersection:.2g} \n Fraction of sources with prob_has_match > {cutoff_intersection:.2g} = {frac_src_p_any_over:.2g}%")
-
-
-    cutoff_mask = test_df_matched.prob_has_match > cutoff_intersection
-    true_check_mask = test_df_matched.srgz_equal_true
-
-    n_assigned_ctps = len(test_df_matched[cutoff_mask])
-
-    true_assignment = len(test_df_matched[cutoff_mask & true_check_mask])
-    false_assingment = len(test_df_matched[cutoff_mask & ~true_check_mask])
-
-    print('+++Statistics+++')
-    print(f"{len(test_df_matched)} X-ray sources in validation set with counterparts") 
-    print(f"--Out of those, {len(test_df_matched)-n_assigned_ctps} sources were assigned hostless (prob_has_match < {cutoff_intersection:.2g}) ")
-    print(f"{n_assigned_ctps} sources have prob_has_match > {cutoff_intersection:.2g}")
-    print(f'Out of those {n_assigned_ctps}: ')
-    print(f"--{true_assignment} sources have correct srgz counterpart")
-    print(f"--{false_assingment} sources have incorrect srgz counterpart")
-
-
-    if not plot_res:
-        plt.close()
-
-    return cutoff_intersection, completeness_intersection,  cutoffs, completeness, purity
-
-
-
 
 
 
@@ -1132,7 +957,7 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
                             colname_ra1: str, colname_dec1: str,
                             colname_ra2: str, colname_dec2: str,
                             match_radius: float = 3.0,
-                            df_prefix: str = 'matched',
+                            df_prefix: str = '',
                             closest: bool = False,
                             ):
     """
@@ -1148,7 +973,7 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
         colname_ra2 (str): columns name for ra in df2
         colname_dec2 (str): columns name for dec in df2
         match_radius (float, optional): match radius in arcsec. Defaults to 3.0.
-        df_prefix (str, optional): prefix to prepend to the columns of the second data frame. Defaults to ''.
+        df_prefix (str, optional): prefix to prepend to the columns of the second data frame. Defaults to ''. If exists, '_' is appended.
         closest (bool, optional): whether to return the closest match. Defaults to False.
 
     Returns:
@@ -1165,6 +990,11 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
                                 df_prefix = 'GAIA',
                                 closest=False)
     """
+    if df_prefix != '':
+        df_prefix = df_prefix + '_'
+    else:
+        df_prefix = ''
+
     df1 = df1.copy()
     orig_size_1 = df1.shape[0]
     orig_size_2 = df2.shape[0]
@@ -1173,30 +1003,35 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
     df1.reset_index(inplace=True)
     df2.reset_index(inplace=True)
 
-    coords1 = SkyCoord(ra = df1[colname_ra1]*u.degree, dec = df1[colname_dec1]*u.degree)
-    coords2 = SkyCoord(ra = df2[colname_ra2]*u.degree, dec = df2[colname_dec2]*u.degree)
+    coords1 = SkyCoord(ra = df1[colname_ra1].values*u.degree, dec = df1[colname_dec1].values*u.degree)
+    coords2 = SkyCoord(ra = df2[colname_ra2].values*u.degree, dec = df2[colname_dec2].values*u.degree)
 
     idx1, idx2, ang_sep, _ = coordinates.search_around_sky(coords1, coords2, match_radius*u.arcsec)
     ang_sep = ang_sep.to(u.arcsec)
-    ang_sep = pd.DataFrame({df_prefix+'_sep': ang_sep})
+    ang_sep = pd.DataFrame({df_prefix+'sep': ang_sep})
 
     df1 = df1.loc[idx1]
     df1.reset_index(drop=True, inplace=True)
+
     df2 = df2.loc[idx2]
     df2.reset_index(drop=True, inplace=True)
-    df2.columns  = [df_prefix+'_'+x for x in df2.columns]
+    df2.columns  = [df_prefix+x for x in df2.columns]
+    df2.rename(columns={df_prefix+'index':'matched_index'}, inplace=True)
     df_matched = pd.concat([df1,ang_sep, df2], axis=1) 
-    df_matched.sort_values(by=['index', df_prefix+'_sep'], inplace=True, ascending=True)
+
+    df_matched.sort_values(by=['index', df_prefix+'sep'], inplace=True, ascending=True)
 
     print('cross-match radius', match_radius, 'arcsec')
     print('total matches:', len(df_matched), 'out of', orig_size_1, 'x' ,orig_size_2)
+
+    df_matched['n_near'] = df_matched.groupby('index')['sep'].transform('count')
 
     if closest:
         df_matched = df_matched.drop_duplicates(subset=['index'], keep='first')
         print('total closest matches:', len(df_matched))
 
     df_matched.drop(columns=['index'], inplace=True)
-    df_matched.drop(columns=[df_prefix+'_index'], inplace=True)
+    df_matched.drop(columns=['matched_index'], inplace=True)
 
     return df_matched                  
 
