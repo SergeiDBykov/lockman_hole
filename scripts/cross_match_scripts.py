@@ -979,6 +979,14 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
     Returns:
         pd.DataFrame: match of df1 and df2
 
+        the columns are from the original df1 and df2 (with the prefix for df2). 
+        added columns: 
+        sep - separation in arcsec
+        
+        n_near - number of matches from df2  for a particular source from df1. For example n_near=10 for a source in df1 means that there are 10 sources  in df2 within the match_radius.
+
+        n_matches - for a given source from df2, this is a number of sources from df1 that are within match_radius. For example n_matches = 2 for a source in df2 means that there are 2 sources in df1 which have this source from df2 within match_radius. If n_matches = 1 then this source from df2 is unique.
+
 
     example:
     cross_match_data_frames(desi, gaia, 
@@ -1021,10 +1029,17 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
 
     df_matched.sort_values(by=['index', df_prefix+'sep'], inplace=True, ascending=True)
 
+
+    df_matched[df_prefix+'n_near'] = df_matched.groupby('index')[df_prefix+'sep'].transform('count')
+    second_index_value_counts = df_matched['matched_index'].value_counts()
+    df_matched[df_prefix+ 'n_matches'] = df_matched['matched_index'].apply(lambda x: second_index_value_counts[x])
+
     print('cross-match radius', match_radius, 'arcsec')
     print('total matches:', len(df_matched), 'out of', orig_size_1, 'x' ,orig_size_2)
 
-    df_matched['n_near'] = df_matched.groupby('index')['sep'].transform('count')
+    print('\t total unique pairs:', len(df_matched.query(df_prefix+'n_matches == 1')))
+    
+    print('\t total non-unique pairs (duplicates in df2):', len(df_matched.query(df_prefix+'n_matches > 1')))
 
     if closest:
         df_matched = df_matched.drop_duplicates(subset=['index'], keep='first')
