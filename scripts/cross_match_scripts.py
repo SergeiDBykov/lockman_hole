@@ -257,9 +257,13 @@ def pandas_to_fits(dataframe: pd.DataFrame,
     return None
 
 
-def fits_to_pandas(filename: str,):
-    data = Table.read(data_path+filename, format='fits')
-    with fits.open(data_path+'/'+filename , 'readonly') as file:
+def fits_to_pandas(filename: str, include_data_path = True):
+    if include_data_path:
+        filename = data_path+'/'+filename
+    else:
+        filename = filename
+    data = Table.read(filename, format='fits')
+    with fits.open(filename , 'readonly') as file:
         dataname = file[1].name
     #the next is to handle multi-dimensional columns
     names = [name for name in data.colnames if len(data[name].shape) <= 1]
