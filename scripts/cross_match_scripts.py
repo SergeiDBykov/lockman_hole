@@ -912,24 +912,25 @@ def desi_reliable_magnitudes(df: pd.DataFrame,
 
 def rayleigh_plot(input_cross_match_df, sep_col = 'sep', pos_err_col = 'pos_err',
     pos_err_corr_func = lambda x: x, corr_error_str='err*1.0', plotlabel = 'eROSITAx',
-    xlim=(0, 3), ylim=(1e-3, 1)): 
+    ylim=(1e-3, 1)): 
     '''
     input_cross_match_df - dataframe with cross-matched catalog 1 with catalog 2.
     all cuts and queries should be done before calling this function.
     '''
-
+    input_cross_match_df = input_cross_match_df.copy()
     pos_err = pos_err_corr_func(input_cross_match_df[pos_err_col])
     corrected_pos_err = pos_err
 
     rat = input_cross_match_df[sep_col]/corrected_pos_err
-
+    input_cross_match_df['rat'] = rat
     rayleigh_fit = stats.rayleigh.fit(rat)
     #sns.histplot(ero_ctps_tmp, x = rat, bins=50, stat = 'density', ax = ax)
 
     fig, axs =  plt.subplots(nrows=2, ncols = 1, sharex = True, gridspec_kw = {'hspace':0, 'height_ratios': None}, figsize = (12,12))
     ax, ax2 = axs
-    sns.ecdfplot(input_cross_match_df, x = rat, ax = ax, complementary = True, lw = 3)
-    sns.histplot(input_cross_match_df, x = rat, ax = ax2, stat = 'density', lw = 3, bins = 50)
+    
+    sns.ecdfplot(data = input_cross_match_df, x = 'rat', ax = ax, complementary = True, lw = 3)
+    sns.histplot(input_cross_match_df, x = 'rat', ax = ax2, stat = 'density', lw = 3, bins = 50)
 
     for prob in [39.3, 68, 95, 98]:
         ax.axhline(1 - prob/100, color = 'k', ls = '--', alpha = 0.5)
@@ -940,7 +941,7 @@ def rayleigh_plot(input_cross_match_df, sep_col = 'sep', pos_err_col = 'pos_err'
     x = np.linspace(0, rat.max()*1.05, 100)
     ax.plot(x, 1-stats.rayleigh.cdf(x, *rayleigh_fit), 'r-', lw=3, alpha=0.6, label='Rayleigh fit: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % rayleigh_fit, zorder = -1)
     ax.plot(x, 1-stats.rayleigh.cdf(x, 0,1), 'g-', lw=3, alpha=0.6, label='Rayleigh fixed: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % (0,1), zorder = -1)
-    ax.set(ylim=ylim, xlim=xlim)
+    ax.set(ylim=ylim)
     ax2.set_xlabel('Separation/corrected_pos_err; \n '+ 'corr_error='+corr_error_str)
     ax.set_yscale('log')
 
@@ -949,6 +950,25 @@ def rayleigh_plot(input_cross_match_df, sep_col = 'sep', pos_err_col = 'pos_err'
 
     plt.legend()
     plt.suptitle(plotlabel+', '+str(len(input_cross_match_df))+' sources')
+
+
+def add_separation_columns(df, 
+                            colname_ra1: str, colname_dec1: str,
+                            colname_ra2: str, colname_dec2: str,
+                            colname = 'sep'):
+    df = df.copy()
+
+
+    coords1 = SkyCoord(ra = df[colname_ra1].values*u.degree, dec = df[colname_dec1].values*u.degree)
+    coords2 = SkyCoord(ra = df[colname_ra2].values*u.degree, dec = df[colname_dec2].values*u.degree)
+
+    seps = coords1.separation(coords2)
+    seps = seps.to(u.arcsec).value
+
+    df[colname] = seps
+    return df
+     
+
 
 
 
@@ -1004,12 +1024,16 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
         df_prefix = ''
 
     df1 = df1.copy()
+    df2 = df2.copy()
+
     orig_size_1 = df1.shape[0]
     orig_size_2 = df2.shape[0]
 
-    df2 = df2.copy()
     df1.reset_index(inplace=True)
     df2.reset_index(inplace=True)
+    df1.rename(columns={'index': 'index_primary'}, inplace=True)
+    df2.rename(columns={'index': 'index_secondary'}, inplace=True)
+
 
     coords1 = SkyCoord(ra = df1[colname_ra1].values*u.degree, dec = df1[colname_dec1].values*u.degree)
     coords2 = SkyCoord(ra = df2[colname_ra2].values*u.degree, dec = df2[colname_dec2].values*u.degree)
@@ -1019,20 +1043,28 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
     ang_sep = pd.DataFrame({df_prefix+'sep': ang_sep})
 
     df1 = df1.loc[idx1]
-    df1.reset_index(drop=True, inplace=True)
-
     df2 = df2.loc[idx2]
-    df2.reset_index(drop=True, inplace=True)
+
+    df1.reset_index(inplace = True, drop = True)
+    df2.reset_index(inplace = True, drop = True)
+
+
     df2.columns  = [df_prefix+x for x in df2.columns]
-    df2.rename(columns={df_prefix+'index':'matched_index'}, inplace=True)
-    df_matched = pd.concat([df1,ang_sep, df2], axis=1) 
+    df2.rename(columns={df_prefix+'index_secondary':'index_secondary'}, inplace=True)
 
-    df_matched.sort_values(by=['index', df_prefix+'sep'], inplace=True, ascending=True)
+    df_matched = pd.concat([df1, df2, ang_sep], axis=1) 
 
 
-    df_matched[df_prefix+'n_near'] = df_matched.groupby('index')[df_prefix+'sep'].transform('count')
-    second_index_value_counts = df_matched['matched_index'].value_counts()
-    df_matched[df_prefix+ 'n_matches'] = df_matched['matched_index'].apply(lambda x: second_index_value_counts[x])
+
+    df_matched.sort_values(by=['index_primary', df_prefix+'sep'], inplace=True, ascending=True)
+
+    
+
+    df_matched[df_prefix+'n_near'] = df_matched.groupby('index_primary')[df_prefix+'sep'].transform('count')
+
+    second_index_value_counts = df_matched['index_secondary'].value_counts()
+    df_matched[df_prefix+ 'n_matches'] = df_matched['index_secondary'].apply(lambda x: second_index_value_counts[x])
+
 
     print('cross-match radius', match_radius, 'arcsec')
     print('total matches:', len(df_matched), 'out of', orig_size_1, 'x' ,orig_size_2)
@@ -1042,11 +1074,11 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
     print('\t total non-unique pairs (duplicates in df2):', len(df_matched.query(df_prefix+'n_matches > 1')))
 
     if closest:
-        df_matched = df_matched.drop_duplicates(subset=['index'], keep='first')
+        df_matched = df_matched.drop_duplicates(subset=['index_primary'], keep='first')
         print('total closest matches:', len(df_matched))
 
-    df_matched.drop(columns=['index'], inplace=True)
-    df_matched.drop(columns=['matched_index'], inplace=True)
+    df_matched.drop(columns=['index_primary'], inplace=True)
+    df_matched.drop(columns=['index_secondary'], inplace=True)
 
     return df_matched                  
 
