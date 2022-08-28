@@ -3,5 +3,6 @@ z-old
 1_desi-photo-prior/model/*
 1_desi-photo-prior/old_stuff
 1_desi-photo-prior/model/
-2_desi-crossmatch/cache
-3_desi-identification/old_stuff
+3_desi-crossmatch/cache
+2_desi-validation-catalog/plots
+4_desi-identification/old_stuff
