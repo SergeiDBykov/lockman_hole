@@ -13,7 +13,7 @@ import astropy.io.fits as fits
 import astropy.units as u
 import healpy as hp
 from scipy import stats
-
+import warnings
 import sklearn
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
@@ -814,6 +814,7 @@ def flux_frequency_correction(magnitudes: pd.Series,
 def desi_reliable_magnitudes(df: pd.DataFrame,
                         s_n_threshold: int = 4,
                         colors: bool=True,
+                        prefix: str = '',
                         ) -> pd.DataFrame:
     """
     sources: https://github.com/mbelveder/luminosity_LH/blob/9f4837cb509c780e1c3db79b05c9cc0cd4932c2c/lh_functions.py#L372
@@ -826,15 +827,19 @@ def desi_reliable_magnitudes(df: pd.DataFrame,
         df (pd.DataFrame): DESI catalogue.
         s_n_threshold (int): S/N threshold.
         colors (bool): If True, calculate colors.
+        prefix (str): Prefix for the new columns. It also assumes that you want to add a prefix to a dataframe with (DESI) columns that already have a prefix.
     Returns:
         pd.DataFrame: Catalogue with reliable magnitudes.
     """
+    np.seterr(divide = 'ignore')  #ignore /0 errors in log10
     df = df.copy()
+    original_columns = df.columns
+
     for band in ['g', 'r', 'z', 'w1', 'w2', 'w3', 'w4']:
 
-        flux_colname = f'flux_{band}'
-        flux_ivar_colname = f'flux_ivar_{band}'
-        dered_mag_colname = f'dered_mag_{band}'
+        flux_colname = prefix+f'flux_{band}'
+        flux_ivar_colname = prefix+f'flux_ivar_{band}'
+        dered_mag_colname = prefix+f'dered_mag_{band}'
 
 
         # All magnitudes (unreliable included)
@@ -886,25 +891,32 @@ def desi_reliable_magnitudes(df: pd.DataFrame,
 
 
 
-    # if xray:
-    #     # X-ray to optical flux
-    #     df['lg(Fx/Fo_g)'] = np.log10(df['flux_05-20'] / df['flux_g'])
-    #     df['lg(Fx/Fo_r)'] = np.log10(df['flux_05-20'] / df['flux_r'])
-    #     df['lg(Fx/Fo_z)'] = np.log10(df['flux_05-20'] / df['flux_z'])
+    xray = 'flux_05-20' in original_columns
+    if xray:
+        # X-ray to optical flux
+        df['lg(Fx/Fo_g)'] = np.log10(df['flux_05-20'] / df[prefix+'flux_g'])
+        df['lg(Fx/Fo_r)'] = np.log10(df['flux_05-20'] / df[prefix+'flux_r'])
+        df['lg(Fx/Fo_z)'] = np.log10(df['flux_05-20'] / df[prefix+'flux_z'])
 
-    #     '''
-    #     TODO: update with datalab data when possible
-    #     '''
+        '''
+        TODO: update with datalab data when possible (MB)
+        '''
 
-    #     dered_flux_z = 10 ** (9 - df['rel_dered_mag_z'] / 2.5)
-    #     df['rel_dered_lg(Fx/Fo_z)'] = np.log10(df['flux_05-20'] / dered_flux_z)
-    #     df['rel_dered_lg(Fx/Fo_z_corr)'] = np.log10(df['flux_05-20'] / df['rel_desi_flux_corr_z'])
+        dered_flux_z = 10 ** (9 - df['rel_dered_mag_z'] / 2.5)
+        df['rel_dered_lg(Fx/Fo_z)'] = np.log10(df['flux_05-20'] / dered_flux_z)
+        df['rel_dered_lg(Fx/Fo_z_corr)'] = np.log10(df['flux_05-20'] / df['rel_desi_flux_corr_z'])
 
-    #     dered_flux_g = 10 ** (9 - df['rel_dered_mag_g'] / 2.5)
-    #     df['rel_dered_lg(Fx/Fo_g)'] = np.log10(df['flux_05-20'] / dered_flux_g)
+        dered_flux_g = 10 ** (9 - df['rel_dered_mag_g'] / 2.5)
+        df['rel_dered_lg(Fx/Fo_g)'] = np.log10(df['flux_05-20'] / dered_flux_g)
 
-    #     dered_flux_r = 10 ** (9 - df['rel_dered_mag_r'] / 2.5)
-    #     df['rel_dered_lg(Fx/Fo_r)'] = np.log10(df['flux_05-20'] / dered_flux_r)
+        dered_flux_r = 10 ** (9 - df['rel_dered_mag_r'] / 2.5)
+        df['rel_dered_lg(Fx/Fo_r)'] = np.log10(df['flux_05-20'] / dered_flux_r)
+
+
+    new_cols = [col for col in df.columns if col not in original_columns]
+    new_cols_renamed = [prefix + col for col in new_cols]
+
+    df = df.rename(columns=dict(zip(new_cols, new_cols_renamed)))
 
     return df
 
