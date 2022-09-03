@@ -954,7 +954,8 @@ def rayleigh_plot(input_cross_match_df, sep_col = 'sep', pos_err_col = 'pos_err'
     ax.plot(x, 1-stats.rayleigh.cdf(x, *rayleigh_fit), 'r-', lw=3, alpha=0.6, label='Rayleigh fit: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % rayleigh_fit, zorder = -1)
     ax.plot(x, 1-stats.rayleigh.cdf(x, 0,1), 'g-', lw=3, alpha=0.6, label='Rayleigh fixed: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % (0,1), zorder = -1)
     ax.set(ylim=ylim)
-    ax2.set_xlabel('Separation/corrected_pos_err; \n '+ 'corr_error='+corr_error_str)
+    #ax2.set_xlabel('Separation/corrected_pos_err; \n '+ 'corr_error='+corr_error_str)
+    ax2.set_xlabel('Separation/pos_err')
     ax.set_yscale('log')
 
     ax2.plot(x, stats.rayleigh.pdf(x, *rayleigh_fit), 'r-', lw=3, alpha=0.6, label='Rayleigh fit: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % rayleigh_fit, zorder = -1)

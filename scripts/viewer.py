@@ -118,7 +118,7 @@ def desi_image_cutout(
     sdss_ra_name: str = 'ra',
     sdss_dec_name: str = 'dec',
     jpeg: bool = True,
-    description: str = '',
+    cpart_info: str = '',
     save_path: str = ''
     ):
     """
@@ -312,7 +312,7 @@ def desi_image_cutout(
         ax.scatter(
             sdss_nearby_df[sdss_ra_name], sdss_nearby_df[sdss_dec_name],
             transform=ax.get_transform('icrs'), marker='s',
-            s=150, color='none', edgecolor='darkorange', label='SDSS'
+            s=150, color='none', edgecolor='darkorange', label='SDSS', lw=2
             )
 
         for _, row in sdss_nearby_df.iterrows():
@@ -324,6 +324,25 @@ def desi_image_cutout(
                 color='k',
                 bbox=dict(facecolor='white', alpha=0.3, edgecolor='darkorange', linewidth=2)
                 )
+
+    # MILQ sources
+    if not np.isnan(cpart_info['MILQ_RA']):
+        ax.scatter(
+            cpart_info['MILQ_RA'], cpart_info['MILQ_DEC'],
+            transform=ax.get_transform('icrs'), marker='s',
+            s=150, color='none', edgecolor='magenta', label='MILQ',
+            lw=2
+            )
+
+    # GAIA source
+    if not np.isnan(cpart_info['GAIA_ra']):
+        ax.scatter(
+            cpart_info['GAIA_ra'], cpart_info['GAIA_dec'],
+            transform=ax.get_transform('icrs'),
+            s=150, color='none', edgecolor='pink', label='GAIA',
+            lw=2
+            )
+
 
     if simbad_table is not None:
         simbad_df = simbad_table.to_pandas()
@@ -347,14 +366,16 @@ def desi_image_cutout(
                 bbox=dict(facecolor='white', alpha=0.3, edgecolor='lime', linewidth=2)
                 )
 
-    # fig.suptitle(f'', y=1.03)
-    ax.set_title(f'{ero_name}, p any: {ero_p_any:.0%}{description}', y=1.1)
+    x='rel_dered_lg(Fx/Fo_z_corr)'
+    y='rel_dered_r_z'
+    cpart_description = f', class: {cpart_info.class_4}, ext: {cpart_info.extended}, r-z: {cpart_info[x]:.2f}, lg(Fx/Fopt): {cpart_info[y]:.2f}'
+    ax.set_title(f'{ero_name}, p any: {ero_p_any:.0%}{cpart_description}', fontsize=16, y=1.1)
     print()
     print(f'{ero_name}')
     print()
 
     ax.set(xlim=xlim_frozen, ylim=ylim_frozen)
-    lgnd = ax.legend(loc='upper right')
+    lgnd = ax.legend(loc='upper right', fontsize=14)
     for handle in lgnd.legendHandles:
         handle._sizes = [70]
 
@@ -391,7 +412,7 @@ def desi_image_cutout(
     mpl_table.scale(1, 2)  
 
     if save_path != '':
-        plt.close()
+        plt.show()
         Path(save_path).mkdir(parents=True, exist_ok=True)
         fig.savefig(f'{save_path}{ero_name}.png', dpi=200, bbox_inches='tight')
 
