@@ -271,6 +271,13 @@ def fits_to_pandas(filename: str, include_data_path = True):
     dataframe.reset_index(inplace=True)
     dataframe.rename(columns={'index': dataname}, inplace=True)
 
+
+    #convert bytes to strings
+    str_df = dataframe.select_dtypes([np.object])
+    str_df = str_df.stack().str.decode('utf-8').unstack()
+    for col in str_df:
+        dataframe[col] = str_df[col]
+    
     return dataframe
 
 
@@ -625,21 +632,17 @@ def find_completeness_purity_intercept(cutoffs, completeness, purity):
 
 
 def assess_goodnes_of_cross_match(match_df,
-                                 match_flag_col='match_flag',
+                                 match_flag_col='nway_match_flag',
                                  candidate_col = 'desi_id',
-                                 true_ctps_col = 'desi_id_true_ctp',
-                                 calib_col = 'prob_has_match',
-                                 plot_res = True):
+                                 true_ctps_col = 'desi_id_true',
+                                 calib_col = 'nway_prob_has_match',
+                                 plot_res = True,
+                                 p_any_cut = None):
 
     match_df_orig  = match_df.copy()
     match_df = match_df.copy()
     match_df = match_df[match_df[match_flag_col]==1]
     match_df = match_df.query(f"~{true_ctps_col}.isna()")
-
-    for col in [candidate_col, true_ctps_col]:
-        #decode utf-8 to ascii
-        match_df[col] = match_df[col].str.decode('utf-8')
-
 
 
     n_ctps = len(match_df)
@@ -654,58 +657,58 @@ def assess_goodnes_of_cross_match(match_df,
         return match_df_out
 
 
-    def calc_stats(match_df, match_df_orig,  verbose = False, for_hostless = False):
+    def calc_stats(match_df, match_df_orig,  verbose = False):
         match_df = match_df.copy()
-        if for_hostless:
-            match_df_tmp = match_df.query(f"{true_ctps_col}=='hostless'")
-            #if verbose: print(match_df_tmp[[true_ctps_col, candidate_col]])
+        total_hostless = len(match_df_orig[match_df_orig[true_ctps_col]=='hostless'])
+        total_not_hostless = len(match_df_orig[match_df_orig[true_ctps_col]!='hostless'])
 
-            assigned = match_df_tmp.query(f"{candidate_col}=='hostless'")
-            
-            assigned_with_correct_ctps = assigned.query(f"{true_ctps_col}=={candidate_col}")
-            total = match_df_orig.query(f"{true_ctps_col}=='hostless'")
+        n_correct_not_hostless_and_correct_ctp = len(match_df.query(f"{true_ctps_col}=={candidate_col} & {true_ctps_col}!='hostless'"))
 
-            n_assigned = len(assigned)
-            n_assigned_with_correct_ctps = len(assigned_with_correct_ctps)
-            n_total = len(total)
-            if n_assigned==0:
-                purity = 0
-            else:
-                purity = n_assigned_with_correct_ctps/n_assigned
-            completeness = n_assigned/n_total
+        n_correct_not_hostless_and_incorrect_ctp = len(match_df.query(f"{true_ctps_col}!={candidate_col} & {true_ctps_col}!='hostless' & {candidate_col}!='hostless'"))
 
-            if verbose:
-                print(' HOSTLESS ')
-                print(f"assigned HOSTLESS: {n_assigned}")
-                print(f"assigned HOSTLESS correctly: {n_assigned_with_correct_ctps}")
-                print(f"total HOSTLESS: {n_total}")
-                print(f"purity [assigned HOSTLESS correctly / all assigned HOSTLESS]: {purity}")
-                print(f"completeness [all HOSTLESS assigned / total HOSTLESS]: {completeness}")
-        else:
-            match_df_tmp = match_df.query(f"{true_ctps_col}!='hostless'")
-            assigned = match_df_tmp.query(f"{candidate_col}!='hostless'")
-            assigned_with_correct_ctps = assigned.query(f"{true_ctps_col}=={candidate_col}")
-            total = match_df_orig.query(f"{true_ctps_col}!='hostless'")
+        n_incorrect_not_hostless = len(match_df.query(f"{true_ctps_col}=='hostless' & {candidate_col}!='hostless'"))
 
-            n_assigned = len(assigned)
-            n_assigned_with_correct_ctps = len(assigned_with_correct_ctps)
-            n_total = len(total)
+        n_incorrect_hostless = len(match_df.query(f"{true_ctps_col}!='hostless' & {candidate_col}=='hostless'"))
 
-            purity = n_assigned_with_correct_ctps/n_assigned
-            completeness = n_assigned/n_total
+        n_correct_hostless = len(match_df.query(f"{true_ctps_col}=='hostless' & {candidate_col}=='hostless'"))
 
-            if verbose:
-                print(' NOT HOSTLESS ')
-                print(f"assigned NOT HOSTLESS: {n_assigned}")
-                print(f"assigned NOT HOSTLESS with correct match: {n_assigned_with_correct_ctps}")
-                print(f"total: {n_total}")
-                print(f"purity [assigned NOT HOSTLESS correctly / all NOT HOSTLESS]: {purity}")
-                print(f"completeness [all NOT HOSTLESS / total NOT HOSTLESS]: {completeness}")
+
+
+        overall_purity = (n_correct_hostless+n_correct_not_hostless_and_correct_ctp) / (total_hostless + total_not_hostless)
+
+        not_hostless_purity = (n_correct_not_hostless_and_correct_ctp) / ( n_correct_not_hostless_and_correct_ctp+ n_correct_not_hostless_and_incorrect_ctp + n_incorrect_not_hostless)
+
+        not_hostless_completeness = (n_correct_not_hostless_and_correct_ctp) / (total_not_hostless)
+
+        hostless_purity = (n_correct_hostless) / (n_correct_hostless + n_incorrect_hostless)
+
+        hostless_completeness = (n_correct_hostless) / (total_hostless)
+
+
+        if verbose:
+            print(f"""
+                Total validation set: {total_hostless + total_not_hostless}
+                \t Total hostless: {total_hostless}
+                \t Total not hostless: {total_not_hostless}
+                Assigned not hostless:
+                \t Correct not hostless with correct ctp: {n_correct_not_hostless_and_correct_ctp}
+                \t Correct not hostless with incorrect ctp: {n_correct_not_hostless_and_incorrect_ctp}
+                \t Incorrect not hostless: {n_incorrect_not_hostless}
+                Assigned hostless:
+                \t Incorrect hostless: {n_incorrect_hostless}
+                \t Correct hostless: {n_correct_hostless}
+
+                Overall purity: {overall_purity}
+                Not hostless purity: {not_hostless_purity}
+                Not hostless completeness: {not_hostless_completeness}
+                Hostless purity: {hostless_purity}
+                Hostless completeness: {hostless_completeness}
+            """) 
+
+
+        return overall_purity, not_hostless_purity, not_hostless_completeness, hostless_purity, hostless_completeness
         
-
-        return purity, completeness
-        
-
+    overall_purity_arr = []
     purity_not_hostless_arr = []
     completeness_not_hostless_arr = []
     purity_hostless_arr = []
@@ -714,18 +717,20 @@ def assess_goodnes_of_cross_match(match_df,
     cutoffs = np.linspace(0.02,0.98,100)
     for cutoff in cutoffs:
         match_df_cut = make_cut(match_df, cutoff)
-        purity_not_hostless, completeness_not_hostless = calc_stats(match_df_cut, match_df, verbose=False, for_hostless = False)
-        purity_hostless, completeness_hostless = calc_stats(match_df_cut, match_df, verbose = False, for_hostless = True)
+        stat_res = calc_stats(match_df_cut, match_df, verbose=False)
+        overall_purity, purity_not_hostless, completeness_not_hostless, purity_hostless, completeness_hostless = stat_res
 
         purity_not_hostless_arr.append(purity_not_hostless)
         completeness_not_hostless_arr.append(completeness_not_hostless)
         purity_hostless_arr.append(purity_hostless)
         completeness_hostless_arr.append(completeness_hostless)
+        overall_purity_arr.append(overall_purity)
 
     purity_not_hostless_arr = np.array(purity_not_hostless_arr)
     completeness_not_hostless_arr = np.array(completeness_not_hostless_arr)
     purity_hostless_arr = np.array(purity_hostless_arr)
     completeness_hostless_arr = np.array(completeness_hostless_arr)
+    overall_purity_arr = np.array(overall_purity_arr)
 
 
     cutoff_intersection, completeness_intersection, purity_intersection = find_completeness_purity_intercept(cutoffs, completeness_not_hostless_arr, purity_not_hostless_arr)
@@ -737,10 +742,12 @@ def assess_goodnes_of_cross_match(match_df,
 
     if plot_res:
         plt.figure(figsize=(9,6))
-        plt.plot(cutoffs, purity_not_hostless_arr, 'b-',  label='purity [not hostless]')
-        plt.plot(cutoffs, completeness_not_hostless_arr, 'b--', label='completeness [not hostless]')
-        plt.plot(cutoffs, purity_hostless_arr, 'r-', label='purity [hostless]')
-        plt.plot(cutoffs, completeness_hostless_arr, 'r--', label='completeness [hostless]')
+        plt.plot(cutoffs, overall_purity_arr, 'C0', label='Overall purity')
+        plt.plot(cutoffs, purity_not_hostless_arr, 'C1-',  label='Purity not hostless')
+        plt.plot(cutoffs, completeness_not_hostless_arr, 'C1--', label='Completeness not hostless')
+        plt.plot(cutoffs, purity_hostless_arr, 'C2-', label='Purity hostless')
+        plt.plot(cutoffs, completeness_hostless_arr, 'C2--', label='Completeness hostless')
+
         plt.legend()
         plt.xlabel(calib_col+' cutoff')
         plt.ylabel('purity/completeness')
@@ -749,14 +756,18 @@ def assess_goodnes_of_cross_match(match_df,
 
 
         print(f" Completeness = {100*completeness_intersection:.2g}% \n Purity = {100*purity_intersection:.2g}% \n {calib_col} optimal cutoff =  {cutoff_intersection:.2g} \n Fraction of sources with prob_has_match > {cutoff_intersection:.2g} = {frac_src_p_any_over:.2g}%")
-        plt.ylim(0, 1.1)
+        #plt.ylim(0, 1.1)
+        plt.ylim(0.6, 1.1)
         plt.show()
     else:
         pass
 
-    calc_stats(make_cut(match_df, cutoff_intersection), match_df, verbose = True, for_hostless = False)
-    calc_stats(make_cut(match_df, cutoff_intersection), match_df, verbose = True, for_hostless = True)
-
+    if p_any_cut is None:
+        print(f'p_any cut: {cutoff_intersection:.2g}')
+        calc_stats(make_cut(match_df, cutoff_intersection), match_df, verbose = True)
+    else:
+        print(f'p_any cut: {p_any_cut:.2g}')
+        calc_stats(make_cut(match_df, p_any_cut), match_df, verbose = True)
 
     return cutoffs, completeness_not_hostless_arr, purity_not_hostless_arr, completeness_hostless_arr, purity_hostless_arr, match_df
 
@@ -1116,3 +1127,160 @@ def search_around_r_data_frames(df1: pd.DataFrame, target_ra: float, target_dec:
                                 )
 
     return df_matched                  
+
+
+
+
+def prepare_nway_results(nway_res_orig: pd.DataFrame,
+                        ero_for_nway_fits = "ERO_lhpv_03_23_sd01_a15_g14.fits",
+                        desi_for_nway_fits = "desi_lh.fits",
+                        ero_full_cat = 'ERO_lhpv_03_23_sd01_a15_g14.pkl',
+                        desi_full_cat = 'desi_lh.gz_pkl',
+                        ero_desi_ctps_file = 'validation_ctps_ero_desi_lh.csv'):
+    nway_res_orig = nway_res_orig.copy()
+    nway_res_orig = nway_res_orig[nway_res_orig.DESI!=-1] #nway puts a row with DESI = -1 for every source of the primary match
+
+    #load files used in NWAY
+    ero_pandas = fits_to_pandas(ero_for_nway_fits)
+    desi_pandas = fits_to_pandas(desi_for_nway_fits)
+
+    #Load original files with full catalogs
+    erosita_orig_df = pd.read_pickle(data_path+ero_full_cat)
+    desi_orig_df =  pd.read_pickle(data_path+desi_full_cat, compression = 'gzip')
+    desi_orig_df.columns = ['desi_'+x for x in desi_orig_df.columns]
+    desi_orig_df.rename(columns={'desi_desi_id':'desi_id'}, inplace=True)
+
+
+    ero_true_ctps = pd.read_csv(data_path+ero_desi_ctps_file)
+    erosita_orig_df = erosita_orig_df.merge(ero_true_ctps, on='srcname_fin', how='left')
+
+
+
+    #add a prefix nway_ to the column woth match parameters
+    nway_res = nway_res_orig.rename(columns={c: 'nway_'+c for c in nway_res_orig.
+    columns if c not in ['EROSITA', 'DESI']})
+
+
+    #assign srcname_fin as a ID from ero_pandas according to index in nway_res_orig
+    nway_res['srcname_fin']  = ero_pandas['ID'].values[nway_res['EROSITA']]
+    #the same for desi_pandas
+    nway_res['desi_id'] = desi_pandas['desi_id'].values[nway_res['DESI']]
+
+    #make a table with photometry-only data from DESI dataframe (i.e. all columns are scaled and replaced with -99 if used/not-available/non-significant)
+    desi_pandas_photometry = desi_pandas.drop(['DESI','ra', 'dec'], axis=1, inplace=False)
+    #rename the columns to avoid confusion with further full desi data
+    desi_pandas_photometry = desi_pandas_photometry.rename(columns={c: 'nway_photometry_'+c for c in desi_pandas_photometry.columns if c not in ['desi_id']})
+    #join the photometry-only data to nway_res
+    nway_res = nway_res.merge(desi_pandas_photometry, on='desi_id', how='left')
+
+    #drop EROSITA/DESI columns as they are not needed anymore
+    nway_res = nway_res.drop(['EROSITA', 'DESI'], axis=1, inplace=False)
+
+    #merge with eROSITA data
+    nway_res = erosita_orig_df.merge(nway_res, on = 'srcname_fin')
+
+    #merge with DESI data
+    nway_res = nway_res.merge(desi_orig_df, on = 'desi_id')
+
+
+    #add additional DESI columns including X-ray to optical ratio
+    nway_res = desi_reliable_magnitudes(nway_res, s_n_threshold=3, prefix='desi_')
+
+
+    #assigning match flags
+
+    def get_flag_num(x, flag):
+        try:
+            return x.value_counts()[flag]
+        except:
+            return 0
+
+
+    nway_res['nway_n_match_flag_0'] = nway_res.groupby('srcname_fin')['nway_match_flag'].transform(lambda x: get_flag_num(x, 0))
+
+    nway_res['nway_n_match_flag_2'] = nway_res.groupby('srcname_fin')['nway_match_flag'].transform(lambda x: get_flag_num(x, 2))
+
+    tmp = nway_res.groupby('srcname_fin')['nway_Separation_EROSITA_DESI'].transform(lambda x: min(x))
+    nway_res['nway_is_closest'] = tmp == nway_res['nway_Separation_EROSITA_DESI']
+
+    nway_res['nway_is_within_pos_r98'] = nway_res['nway_Separation_EROSITA_DESI'] < nway_res['pos_r98'] #
+
+    #nway_res['nway_closest_is_psf'] = nway_res.groupby('srcname_fin')['desi_type'].transform(lambda x: x.iloc[0] == 'PSF') #dont forget to sort by separation first
+
+
+    nway_res.sort_values(by=['srcname_fin', 'nway_prob_this_match' ], inplace=True, ascending=[True, False])
+
+    if 'nway_bias_DESI_nnmag_grz' not in nway_res.columns:
+        cols_to_drop = ['nway_dist_bayesfactor_uncorrected', 'nway_dist_bayesfactor', 'nway_dist_post', 'nway_Separation_max', 'nway_ncat', 'nway_p_single']
+        nway_res.drop(columns= cols_to_drop, axis=1, inplace=True)
+    else:
+        cols_to_drop =  ['nway_dist_bayesfactor_uncorrected', 'nway_dist_bayesfactor', 'nway_dist_post', 'nway_Separation_max', 'nway_ncat', 'nway_p_single', 'nway_bias_DESI_nnmag_grz', 'nway_bias_DESI_nnmag_grzw1', 'nway_bias_DESI_nnmag_grzw1w2', 'nway_bias_DESI_rel_dered_mag_g', 'nway_bias_DESI_rel_dered_mag_r', 'nway_bias_DESI_rel_dered_mag_z', 'nway_bias_DESI_rel_dered_g_r', 'nway_bias_DESI_rel_dered_r_z', 'nway_bias_DESI_rel_dered_g_z']
+        nway_res.drop(columns = cols_to_drop, axis=1, inplace=True)
+
+
+
+    #quick test that everything is ok on a sample of a few sources
+    check_cols = ['prob_has_match', 'prob_this_match', 'Separation_EROSITA_DESI', 'match_flag'] 
+
+    for _ in range(10):
+        random_srcname = nway_res['srcname_fin'].sample(1).values[0]
+        random_desi_id_for_srcname = nway_res.loc[nway_res['srcname_fin'] == random_srcname, 'desi_id'].values[0]
+
+        id_of_srcname = ero_pandas.query("ID == @random_srcname").index.values[0]
+        id_of_desi_id = desi_pandas.query("desi_id == @random_desi_id_for_srcname").index.values[0]
+
+        my_res = nway_res.query("srcname_fin == @random_srcname & desi_id == @random_desi_id_for_srcname")
+
+        expected_res = nway_res_orig.query("EROSITA==@id_of_srcname  & DESI == @id_of_desi_id")
+
+        for col in check_cols:
+
+            assert my_res['nway_'+col].values[0] == expected_res[col].values[0], f"nway_{col} does not match for srcname {random_srcname} and desi_id {random_desi_id_for_srcname}"
+
+    print('conjugation test passed')
+
+
+
+    #now we prepare a data frame with only the best match for each eROSITA source
+    #and take into account the true counterpart of each eROSITA source if it is available. If nway assigns incorrect match, I will use the true counterpart instead of the counterpart assigned by nway
+
+    nway_res_best = nway_res.copy()
+
+    #step 1: find indeces of incorrect matches. i.e. match_flag==1 but desi_id!=desi_id_true_ctp
+    idx_incorrect = nway_res_best.eval('nway_match_flag==1 & desi_id!=desi_id_true & desi_id_true!="hostless" & ~desi_id_true.isna()').values
+    nway_res_best[idx_incorrect][['srcname_fin', 'desi_id', 'desi_id_true', 'nway_match_flag']]
+    total_valid = nway_res_best.query('desi_id_true!="hostless" & ~desi_id_true.isna()').desi_id_true.nunique()
+    print('number of incorrect matches: ', idx_incorrect.sum(), ' out of ', total_valid, ' validation sources')
+
+
+    #step 2: assign nway_match_flag=2 to all incorrect matches
+    nway_res_best.loc[idx_incorrect, 'nway_match_flag'] = 2
+    print('assigning nway_match_flag=2 to all incorrect matches')
+
+    #step 3: assign nway_match_flag=1 to the corresponding correct pairs desi_id -- desi_id_true
+    idx_incorrect = nway_res_best.eval('desi_id==desi_id_true & desi_id_true!="hostless" & ~desi_id_true.isna()').values
+    nway_res_best.loc[idx_incorrect, 'nway_match_flag'] = 1
+    print('assigning nway_match_flag=1 to the corresponding correct pairs desi_id -- desi_id_true')
+
+
+    #step 4: sanity check
+    n_unique_true_ctps = nway_res_best.query('desi_id_true!="hostless" & ~desi_id_true.isna()').desi_id_true.nunique()
+    n_correct_matches = len(nway_res_best.query('nway_match_flag==1 &  desi_id==desi_id_true & desi_id_true!="hostless" & ~desi_id_true.isna()'))
+    n_incorrect_matches = len(nway_res_best.query('nway_match_flag==1 &  desi_id!=desi_id_true & desi_id_true!="hostless" & ~desi_id_true.isna()'))
+
+    assert n_unique_true_ctps == n_correct_matches 
+    assert n_incorrect_matches == 0
+
+    nway_res_best = nway_res_best.query('nway_match_flag == 1 ')
+
+    nway_res.sort_values(by=['srcname_fin', 'nway_prob_this_match'], ascending=[True, False], inplace=True)
+    nway_res_best = nway_res_best.sort_values(by=['srcname_fin', 'nway_prob_this_match'], ascending=[True, False])
+
+    nway_res.reset_index(drop=True, inplace=True)
+    nway_res_best.reset_index(drop=True, inplace=True)
+
+
+
+    return nway_res, nway_res_best
+
+

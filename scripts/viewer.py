@@ -15,14 +15,6 @@ from astropy.coordinates import SkyCoord
 
 from pathlib import Path
 
-from astroquery.simbad import Simbad
-customSimbad = Simbad()
-# https://github.com/astropy/astroquery/blob/main/astroquery/simbad/data/votable_fields_dict.json
-customSimbad.add_votable_fields(
-    'distance_result', 'ra(d)', 'dec(d)',
-    'otype', 'otype(V)', 'otype(S)', 'plx',
-    'pmra', 'pmdec', 'plx_error'
-    )
 
 def search_around(ra, dec, catalog, search_r_sec):
     """
@@ -102,24 +94,12 @@ def neigbour_df(
     return desi_nearby_featuers
 
 
-def desi_image_cutout(
-    ero_df: pd.DataFrame,
+def desi_image_cutout_for_nway(
+    nway_df: pd.DataFrame,
     ero_name: str,
-    desi_df: pd.DataFrame,
     csc_df: pd.DataFrame = None,
-    csc_ra_name: str = 'ra',
-    csc_dec_name: str = 'dec',
-    csc_error_name: str = 'r_98_csc',
     xmm_df: pd.DataFrame = None,
-    xmm_ra_name: str = 'SC_RA',
-    xmm_dec_name: str = 'SC_DEC',
-    xmm_error_name: str = 'xmm_pos_r98',
-    sdss_df: pd.DataFrame = None,
-    sdss_ra_name: str = 'ra',
-    sdss_dec_name: str = 'dec',
     jpeg: bool = True,
-    cpart_info: str = '',
-    save_path: str = ''
     ):
     """
     Return cutout of DESI image around (`ero_ra`, `ero_dec`)
@@ -128,22 +108,9 @@ def desi_image_cutout(
     https://www.legacysurvey.org/dr9/description/
 
 
-    Args:
-        ero_ra: RA of the ERO source (center of the image)
-        ero_dec: Dec of the ERO source
-        ero_error: Error of the ERO source
-        desi_df: Dataframe with DESI sources
-        csc_df: Dataframe with CSC sources
-        csc_ra_name: Name of the column with RA of the CSC sources
-        csc_dec_name: Name of the column with Dec of the CSC sources
-        csc_error_name: Name of the column with error of the CSC sources
-        jpeg: If True, the image is saved as a JPEG file
-        title: Title of the image
-        description: Description of the image (adds to the image title)
-        save_path: Path to save the image
     """
 
-    ero_field_df = ero_df[ero_df['srcname_fin'] == ero_name]
+    ero_field_df = nway_df[nway_df['srcname_fin'] == ero_name]
     ero_close_field_df = ero_field_df.query('nway_Separation_EROSITA_DESI < 1.5 * pos_r98')
 
     ero_ra = ero_field_df.iloc[0]['RA_fin']
@@ -161,31 +128,9 @@ def desi_image_cutout(
     fits_image_data = hdu.data[0, :, :]
     search_r_sec = 40
 
-    desi_nearby_df = neigbour_df(ero_ra, ero_dec, desi_df, 'ra', 'dec', search_r_sec)
-    desi_nearby_extended = desi_nearby_df.query('type != "PSF"')
+    desi_nearby_df = ero_field_df[['desi_ra', 'desi_dec', 'desi_id']]
 
-    # Features of the nearby CSC sources
-    csc_nearby_df = neigbour_df(
-        ero_ra, ero_dec, csc_df, csc_ra_name, csc_dec_name, search_r_sec
-        )
-    # Features of the nearby XMM sources
-    xmm_nearby_df = neigbour_df(
-        ero_ra, ero_dec,
-        xmm_df,
-        ra_cat_column=xmm_ra_name,
-        dec_cat_column=xmm_dec_name,
-        search_r_sec=search_r_sec
-        )
-    # Features of the nearby SDSS sources
-    sdss_nearby_df = neigbour_df(
-        ero_ra, ero_dec, sdss_df, sdss_ra_name, sdss_dec_name, search_r_sec
-    )
 
-    # Simbad query
-    simbad_search_r = 2 * ero_error
-    coords = SkyCoord(ero_ra, ero_dec, unit='deg')
-    simbad_table = customSimbad.query_region(coords, radius=simbad_search_r * u.arcsec)
-    
     fig = plt.figure(figsize=(10, 10))
     ax = plt.subplot(projection=wcs)
 
@@ -217,7 +162,7 @@ def desi_image_cutout(
 
     # DESI sources
     ax.scatter(
-        desi_nearby_df['ra'], desi_nearby_df['dec'],
+        desi_nearby_df['desi_ra'], desi_nearby_df['desi_dec'],
         transform=ax.get_transform('icrs'),
         s=300, edgecolor='blue', facecolor='none',
         lw=.5
@@ -244,132 +189,96 @@ def desi_image_cutout(
                 bbox=dict(facecolor='white', alpha=0.1)
                 )
     
-    # Extended DESI sources
-    ax.scatter(
-        desi_nearby_extended['ra'], desi_nearby_extended['dec'],
-        transform=ax.get_transform('icrs'), marker='D',
-        s=150, edgecolor='blue', facecolor='none',
-        label='DESI extended', linewidth=.5
-        )
 
-    if len(csc_nearby_df) > 0:
-        ax.scatter(
-            csc_df[csc_ra_name], csc_df[csc_dec_name],
-            transform=ax.get_transform('icrs'),
-            s=10, color='r', label='CSC'
+    if csc_df is not None:
+        csc_nearby_df = neigbour_df(
+            ero_ra, ero_dec, csc_df, 'ra', 'dec', search_r_sec
             )
-        
-        # Error circles for the CSC sources
+
+            # Error circles for the CSC sources
         for _, row in csc_nearby_df.iterrows():
+
+
+            is_secure = row['secure']
+            if is_secure:
+                edgecolor = 'r'
+                label = 'CSC'
+            else:
+                edgecolor = 'orange'
+                label = 'CSC (not secure)'
+
+            ax.scatter(
+                csc_df['ra'], csc_df['dec'],
+                transform=ax.get_transform('icrs'),
+                s=10, color=edgecolor, label=label
+                )
+        
             csc_r = SphericalCircle(
-                (row[csc_ra_name] * u.deg,
-                row[csc_dec_name] * u.deg),
-                row[csc_error_name] * u.arcsec,
-                edgecolor='red', facecolor='none', lw=1,
-                transform=ax.get_transform('icrs')
+                (row['ra'] * u.deg,
+                row['dec'] * u.deg),
+                row['r_98'] * u.arcsec,
+                edgecolor=edgecolor, facecolor='none', lw=1,
+                transform=ax.get_transform('icrs'),
+                ls = '-'
                 )
             ax.add_patch(csc_r)
             
             csc_r_false = SphericalCircle(
-                (row[csc_ra_name] * u.deg,
-                row[csc_dec_name] * u.deg),
+                (row['ra'] * u.deg,
+                row['dec'] * u.deg),
                 1.43 * u.arcsec,
-                edgecolor='red', facecolor='none', lw=1,
+                edgecolor=edgecolor, facecolor='none', lw=1,
                 transform=ax.get_transform('icrs'),
-                ls='--'
+                ls = '--'
                 )
             ax.add_patch(csc_r_false)
+            
 
-    if len(xmm_nearby_df) > 0:
-        ax.scatter(
-            xmm_nearby_df[xmm_ra_name], xmm_nearby_df[xmm_dec_name],
-            transform=ax.get_transform('icrs'),
-            s=10, color='green', label='XMM'
+    if xmm_df is not None:
+        xmm_nearby_df = neigbour_df(
+            ero_ra, ero_dec, xmm_df, 'sc_ra', 'sc_dec', search_r_sec
             )
 
-        # Error circles for the XMM sources
+            # Error circles for the xmm sources
         for _, row in xmm_nearby_df.iterrows():
+
+            is_secure = row['secure']
+            if is_secure:
+                edgecolor = 'g'
+                label = 'XMM'
+            else:
+                edgecolor = 'yellowgreen'
+                label = 'XMM (not secure)'
+
+            ax.scatter(
+                xmm_df['sc_ra'], xmm_df['sc_dec'],
+                transform=ax.get_transform('icrs'),
+                s=10, color=edgecolor, label=label
+                )
+        
             xmm_r = SphericalCircle(
-                (row[xmm_ra_name] * u.deg,
-                row[xmm_dec_name] * u.deg),
-                row[xmm_error_name] * u.arcsec,
-                edgecolor='green', facecolor='none', lw=1,
-                transform=ax.get_transform('icrs')
+                (row['sc_ra'] * u.deg,
+                row['sc_dec'] * u.deg),
+                row['r_98'] * u.arcsec,
+                edgecolor=edgecolor, facecolor='none', lw=1,
+                transform=ax.get_transform('icrs'),
+                ls = '-'
                 )
             ax.add_patch(xmm_r)
             
             xmm_r_false = SphericalCircle(
-                (row[xmm_ra_name] * u.deg,
-                row[xmm_dec_name] * u.deg),
+                (row['sc_ra'] * u.deg,
+                row['sc_dec'] * u.deg),
                 1.43 * u.arcsec,
-                edgecolor='green', facecolor='none', lw=1,
+                edgecolor=edgecolor, facecolor='none', lw=1,
                 transform=ax.get_transform('icrs'),
-                ls='--'
+                ls = '--'
                 )
             ax.add_patch(xmm_r_false)
 
-    if len(sdss_nearby_df) > 0:
-        ax.scatter(
-            sdss_nearby_df[sdss_ra_name], sdss_nearby_df[sdss_dec_name],
-            transform=ax.get_transform('icrs'), marker='s',
-            s=150, color='none', edgecolor='darkorange', label='SDSS', lw=2
-            )
-
-        for _, row in sdss_nearby_df.iterrows():
-            ax.text(
-                (1 + 1.2e-5) * row[sdss_ra_name],
-                (1 - 2e-6) * row[sdss_dec_name],
-                row['class'][:3],
-                transform=ax.get_transform('icrs'), fontsize=12,
-                color='k',
-                bbox=dict(facecolor='white', alpha=0.3, edgecolor='darkorange', linewidth=2)
-                )
-
-    # MILQ sources
-    if not np.isnan(cpart_info['MILQ_RA']):
-        ax.scatter(
-            cpart_info['MILQ_RA'], cpart_info['MILQ_DEC'],
-            transform=ax.get_transform('icrs'), marker='s',
-            s=150, color='none', edgecolor='magenta', label='MILQ',
-            lw=2
-            )
-
-    # GAIA source
-    if not np.isnan(cpart_info['GAIA_ra']):
-        ax.scatter(
-            cpart_info['GAIA_ra'], cpart_info['GAIA_dec'],
-            transform=ax.get_transform('icrs'),
-            s=150, color='none', edgecolor='pink', label='GAIA',
-            lw=2
-            )
 
 
-    if simbad_table is not None:
-        simbad_df = simbad_table.to_pandas()
-        print(f'{len(simbad_df)} Simbad objects are found in {simbad_search_r:.1f}"')
-        # print(simbad_df.head())
-
-        ax.scatter(
-            simbad_df['RA_d'], simbad_df['DEC_d'],
-            transform=ax.get_transform('icrs'),
-            s=30, color='none', edgecolor='lime', label='Simbad'
-            )
-
-        for _, row in simbad_df.iterrows():
-
-            ax.text(
-                (1 - 3e-6) * row['RA_d'],
-                (1 - 1e-6) * row['DEC_d'],
-                row['OTYPE'],
-                transform=ax.get_transform('icrs'), fontsize=12,
-                color='k',
-                bbox=dict(facecolor='white', alpha=0.3, edgecolor='lime', linewidth=2)
-                )
-
-    x='rel_dered_lg(Fx/Fo_z_corr)'
-    y='rel_dered_r_z'
-    cpart_description = f', class: {cpart_info.class_4}, ext: {cpart_info.extended}, r-z: {cpart_info[x]:.2f}, lg(Fx/Fopt): {cpart_info[y]:.2f}'
-    ax.set_title(f'{ero_name}, p any: {ero_p_any:.0%}{cpart_description}', fontsize=16, y=1.1)
+    ax.set_title(f'{ero_name}, p any: {ero_p_any:.0%}', fontsize=16, y=1.1)
     print()
     print(f'{ero_name}')
     print()
@@ -387,12 +296,12 @@ def desi_image_cutout(
 
     ero_field_df_for_table = ero_field_df.copy()
     ero_field_df_for_table = ero_field_df_for_table.query('nway_prob_this_match>0.01').sort_values('nway_prob_this_match', ascending=False)
-    ero_field_df_for_table['is_true_ctp'] = ero_field_df_for_table['nway_desi_id']==ero_field_df_for_table['nway_desi_id_true_ctp']
+    ero_field_df_for_table['is_true_ctp'] = ero_field_df_for_table['desi_id']==ero_field_df_for_table['desi_id_true']
     ero_field_df_for_table['is_true_ctp'] = ero_field_df_for_table['is_true_ctp'].replace({True: '(True)', False: ''})
-    ero_field_df_for_table['desi_objid'] = ero_field_df_for_table['nway_desi_id'].str.split('_', 2).str[-1]
+    ero_field_df_for_table['desi_objid'] = ero_field_df_for_table['desi_id'].str.split('_', 2).str[-1]
     #add (True) to the desi_objid if it is a true match
     ero_field_df_for_table['desi_objid'] = ero_field_df_for_table['desi_objid'] + ero_field_df_for_table['is_true_ctp']
-    ero_field_df_for_table = ero_field_df_for_table[['desi_objid', 'nway_Separation_EROSITA_DESI', 'nway_prob_this_match', 'nway_nnmag_grzw1w2', 'nway_nnmag_grzw1', 'nway_nnmag_grz']]
+    ero_field_df_for_table = ero_field_df_for_table[['desi_objid', 'nway_Separation_EROSITA_DESI', 'nway_prob_this_match', 'nway_photometry_nnmag_grzw1w2_orig', 'nway_photometry_nnmag_grzw1_orig', 'nway_photometry_nnmag_grz_orig']]
     ero_field_df_for_table.columns = ['ID', 'sep', 'p_i', 'grzw1w2', 'grzw1', 'grz']
     ero_field_df_for_table['nnmags'] =  [' '.join("{:.2f}".format(x).replace('-99.00','-') for x in y) for y in map(tuple, ero_field_df_for_table[['grzw1w2', 'grzw1', 'grz']].values)]
 
@@ -409,11 +318,8 @@ def desi_image_cutout(
     loc='upper left')
     mpl_table.auto_set_font_size(False)
     mpl_table.set_fontsize(10)
-    mpl_table.scale(1, 2)  
-
-    if save_path != '':
-        plt.show()
-        Path(save_path).mkdir(parents=True, exist_ok=True)
-        fig.savefig(f'{save_path}{ero_name}.png', dpi=200, bbox_inches='tight')
+    mpl_table.scale(1, 2)
 
     plt.show()
+    return fig
+#upd nway, calibration, viewer, cat construction p1
