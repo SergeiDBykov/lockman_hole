@@ -7,3 +7,5 @@ z-old
 2_desi-validation-catalog/plots
 4_desi-identification/old_stuff
 3_desi-crossmatch/plots
+3_desi-crossmatch/temporary_notebooks/*
+2_desi-validation-catalog/temporary_notebooks/*
