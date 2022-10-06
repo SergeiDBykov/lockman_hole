@@ -107,7 +107,6 @@ def desi_image_cutout_for_nway(
     Obtaining Images and Raw Data:
     https://www.legacysurvey.org/dr9/description/
 
-
     """
 
     ero_field_df = nway_df[nway_df['srcname_fin'] == ero_name]
@@ -126,12 +125,12 @@ def desi_image_cutout_for_nway(
     # Image dimensions
     wcs = WCS(hdu.header)[0, :, :]
     fits_image_data = hdu.data[0, :, :]
-    search_r_sec = 40
+    search_r_sec = 30
 
     desi_nearby_df = ero_field_df[['desi_ra', 'desi_dec', 'desi_id']]
 
 
-    fig = plt.figure(figsize=(10, 10))
+    fig = plt.figure(figsize=(9, 9))
     ax = plt.subplot(projection=wcs)
 
     # Color map etc.
@@ -192,9 +191,9 @@ def desi_image_cutout_for_nway(
 
     if csc_df is not None:
         csc_nearby_df = neigbour_df(
-            ero_ra, ero_dec, csc_df, 'ra', 'dec', search_r_sec
+            ero_ra, ero_dec, csc_df[csc_df.secure==True], 'ra', 'dec', search_r_sec
             )
-
+        print('non secure sources of XMM/CSC are not SHOWN!')
             # Error circles for the CSC sources
         for _, row in csc_nearby_df.iterrows():
 
@@ -236,7 +235,7 @@ def desi_image_cutout_for_nway(
 
     if xmm_df is not None:
         xmm_nearby_df = neigbour_df(
-            ero_ra, ero_dec, xmm_df, 'sc_ra', 'sc_dec', search_r_sec
+            ero_ra, ero_dec, xmm_df[xmm_df.secure==True], 'sc_ra', 'sc_dec', search_r_sec
             )
 
             # Error circles for the xmm sources
@@ -278,21 +277,24 @@ def desi_image_cutout_for_nway(
 
 
 
-    ax.set_title(f'{ero_name}, p any: {ero_p_any:.0%}', fontsize=16, y=1.1)
+    ax.set_title(f'{ero_name}, $p_{{any}}$: {ero_p_any:.2f}', fontsize=20, y=1.1)
     print()
     print(f'{ero_name}')
     print()
 
     ax.set(xlim=xlim_frozen, ylim=ylim_frozen)
-    lgnd = ax.legend(loc='upper right', fontsize=14)
+    lgnd = ax.legend(loc='upper right', fontsize=20)
     for handle in lgnd.legendHandles:
         handle._sizes = [70]
 
     # ICRS coordinates
     overlay = ax.get_coords_overlay('icrs')
     overlay.grid(color='gray', ls='dotted')
-    overlay[0].set_axislabel('Right Ascension')
-    overlay[1].set_axislabel('Declination')
+    overlay[0].set_axislabel(' ')
+    overlay[1].set_axislabel(' ')
+    ax.coords[0].set_axislabel('Right Ascension')
+    ax.coords[1].set_axislabel('Declination')
+
 
     ero_field_df_for_table = ero_field_df.copy()
     ero_field_df_for_table = ero_field_df_for_table.query('nway_prob_this_match>0.01').sort_values('nway_prob_this_match', ascending=False)
@@ -302,13 +304,16 @@ def desi_image_cutout_for_nway(
     #add (True) to the desi_objid if it is a true match
     ero_field_df_for_table['desi_objid'] = ero_field_df_for_table['desi_objid'] + ero_field_df_for_table['is_true_ctp']
     ero_field_df_for_table = ero_field_df_for_table[['desi_objid', 'nway_Separation_EROSITA_DESI', 'nway_prob_this_match', 'nway_photometry_nnmag_grzw1w2_orig', 'nway_photometry_nnmag_grzw1_orig', 'nway_photometry_nnmag_grz_orig']]
-    ero_field_df_for_table.columns = ['ID', 'sep', 'p_i', 'grzw1w2', 'grzw1', 'grz']
+    ero_field_df_for_table.columns = ['DESI ID', 'sep', '$p_i$', 'grzw1w2', 'grzw1', 'grz']
     ero_field_df_for_table['nnmags'] =  [' '.join("{:.2f}".format(x).replace('-99.00','-') for x in y) for y in map(tuple, ero_field_df_for_table[['grzw1w2', 'grzw1', 'grz']].values)]
 
     ero_field_df_for_table.drop(['grzw1w2', 'grzw1', 'grz'], axis=1, inplace=True)
+    ero_field_df_for_table.drop(['nnmags'], axis=1, inplace=True)
 
     ero_field_df_for_table = ero_field_df_for_table.round(2)
-    colWidths=[0.15, 0.1, 0.1, 0.2]
+    #colWidths=[0.15, 0.1, 0.1, 0.2]
+    colWidths=[0.15, 0.1, 0.1]
+    colWidths = [x+0.03 for x in colWidths]
     mpl_table = ax.table(cellText=ero_field_df_for_table.values,
                         colLabels=ero_field_df_for_table.columns,
                         colWidths=colWidths,
@@ -317,7 +322,7 @@ def desi_image_cutout_for_nway(
                         colLoc='center',
     loc='upper left')
     mpl_table.auto_set_font_size(False)
-    mpl_table.set_fontsize(10)
+    mpl_table.set_fontsize(14)
     mpl_table.scale(1, 2)
 
     plt.show()

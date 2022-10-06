@@ -698,11 +698,11 @@ def assess_goodnes_of_cross_match(match_df,
                 \t Incorrect hostless: {n_incorrect_hostless}
                 \t Correct hostless: {n_correct_hostless}
 
-                Overall purity: {overall_purity}
-                Not hostless purity: {not_hostless_purity}
-                Not hostless completeness: {not_hostless_completeness}
-                Hostless purity: {hostless_purity}
-                Hostless completeness: {hostless_completeness}
+                Overall purity: {overall_purity:.2f}
+                Not hostless purity: {not_hostless_purity:.2f}
+                Not hostless completeness: {not_hostless_completeness:.2f}
+                Hostless purity: {hostless_purity:.2f}
+                Hostless completeness: {hostless_completeness:.2f}
             """) 
 
 
@@ -769,7 +769,7 @@ def assess_goodnes_of_cross_match(match_df,
         print(f'p_any cut: {p_any_cut:.2g}')
         calc_stats(make_cut(match_df, p_any_cut), match_df, verbose = True)
 
-    return cutoffs, completeness_not_hostless_arr, purity_not_hostless_arr, completeness_hostless_arr, purity_hostless_arr, match_df
+    return cutoffs, overall_purity_arr, completeness_not_hostless_arr, purity_not_hostless_arr, completeness_hostless_arr, purity_hostless_arr, match_df
 
 
 
