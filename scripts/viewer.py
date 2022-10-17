@@ -191,9 +191,9 @@ def desi_image_cutout_for_nway(
 
     if csc_df is not None:
         csc_nearby_df = neigbour_df(
-            ero_ra, ero_dec, csc_df[csc_df.secure==True], 'ra', 'dec', search_r_sec
+            ero_ra, ero_dec, csc_df, 'ra', 'dec', search_r_sec
             )
-        print('non secure sources of XMM/CSC are not SHOWN!')
+        #print('non secure sources of XMM/CSC are not SHOWN!')
             # Error circles for the CSC sources
         for _, row in csc_nearby_df.iterrows():
 
@@ -225,7 +225,7 @@ def desi_image_cutout_for_nway(
             csc_r_false = SphericalCircle(
                 (row['ra'] * u.deg,
                 row['dec'] * u.deg),
-                1.43 * u.arcsec,
+                1.47 * u.arcsec,
                 edgecolor=edgecolor, facecolor='none', lw=1,
                 transform=ax.get_transform('icrs'),
                 ls = '--'
@@ -235,7 +235,7 @@ def desi_image_cutout_for_nway(
 
     if xmm_df is not None:
         xmm_nearby_df = neigbour_df(
-            ero_ra, ero_dec, xmm_df[xmm_df.secure==True], 'sc_ra', 'sc_dec', search_r_sec
+            ero_ra, ero_dec, xmm_df, 'sc_ra', 'sc_dec', search_r_sec
             )
 
             # Error circles for the xmm sources
@@ -268,7 +268,7 @@ def desi_image_cutout_for_nway(
             xmm_r_false = SphericalCircle(
                 (row['sc_ra'] * u.deg,
                 row['sc_dec'] * u.deg),
-                1.43 * u.arcsec,
+                1.47 * u.arcsec,
                 edgecolor=edgecolor, facecolor='none', lw=1,
                 transform=ax.get_transform('icrs'),
                 ls = '--'
