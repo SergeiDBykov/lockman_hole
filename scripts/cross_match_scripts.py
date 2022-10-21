@@ -874,12 +874,37 @@ def desi_reliable_magnitudes(df: pd.DataFrame,
         if 'w' in band:
             df[f'vega_mag_{band}'] = flux_nmagg2vega_mag(reliable_flux, mode=band)
 
-    W_EFF_Z = 1289.35
-    AB_ZEROPOINT_Z = 1.29484e-9
 
-    df['rel_desi_flux_corr_z'] = flux_frequency_correction(df['rel_dered_mag_z'],
-                                                           w_eff=W_EFF_Z,
-                                                           ab_zeropoint=AB_ZEROPOINT_Z)
+
+        W_EFF_G = 1204.22
+        AB_ZEROPOINT_G = 4.78525e-9
+
+        df['rel_flux_corr_g'] = flux_frequency_correction(
+                df['rel_dered_mag_g'],
+                w_eff=W_EFF_G,
+                ab_zeropoint=AB_ZEROPOINT_G
+                )
+
+
+    W_EFF_R = 1311.48
+    AB_ZEROPOINT_R = 2.66574e-9
+
+    df['rel_flux_corr_r'] = flux_frequency_correction(
+            df['rel_dered_mag_r'],
+            w_eff=W_EFF_R,
+            ab_zeropoint=AB_ZEROPOINT_R
+            )
+
+    W_EFF_Z = 1291.48
+    AB_ZEROPOINT_Z = 1.286e-9
+
+    df['rel_flux_corr_z'] = flux_frequency_correction(
+            df['rel_dered_mag_z'],
+            w_eff=W_EFF_Z,
+            ab_zeropoint=AB_ZEROPOINT_Z
+            )
+
+
 
     if colors:
         #g-z, g-z, r-z all dered
@@ -909,19 +934,18 @@ def desi_reliable_magnitudes(df: pd.DataFrame,
         df['lg(Fx/Fo_r)'] = np.log10(df['flux_05-20'] / df[prefix+'flux_r'])
         df['lg(Fx/Fo_z)'] = np.log10(df['flux_05-20'] / df[prefix+'flux_z'])
 
-        '''
-        TODO: update with datalab data when possible (MB)
-        '''
 
         dered_flux_z = 10 ** (9 - df['rel_dered_mag_z'] / 2.5)
         df['rel_dered_lg(Fx/Fo_z)'] = np.log10(df['flux_05-20'] / dered_flux_z)
-        df['rel_dered_lg(Fx/Fo_z_corr)'] = np.log10(df['flux_05-20'] / df['rel_desi_flux_corr_z'])
+        df['rel_dered_lg(Fx/Fo_z_corr)'] = np.log10(df['flux_05-20'] / df['rel_flux_corr_z'])
 
         dered_flux_g = 10 ** (9 - df['rel_dered_mag_g'] / 2.5)
         df['rel_dered_lg(Fx/Fo_g)'] = np.log10(df['flux_05-20'] / dered_flux_g)
+        df['rel_dered_lg(Fx/Fo_g_corr)'] = np.log10(df['flux_05-20'] / df['rel_dered_mag_g'])
 
         dered_flux_r = 10 ** (9 - df['rel_dered_mag_r'] / 2.5)
         df['rel_dered_lg(Fx/Fo_r)'] = np.log10(df['flux_05-20'] / dered_flux_r)
+        df['rel_dered_lg(Fx/Fo_r_corr)'] = np.log10(df['flux_05-20'] / df['rel_flux_corr_r'])
 
 
     new_cols = [col for col in df.columns if col not in original_columns]
