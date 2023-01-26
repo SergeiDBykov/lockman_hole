@@ -6,7 +6,7 @@ from PIL import Image
 import requests
 import PIL.ImageOps as pops
 import pandas as pd
-
+from typing import Optional
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -16,7 +16,10 @@ from astropy.coordinates import SkyCoord
 from pathlib import Path
 
 
-def search_around(ra, dec, catalog, search_r_sec):
+#credits for the major code: M. Belvederskiy
+
+
+def search_around(ra: float, dec: float, catalog: pd.DataFrame, search_r_sec: float):
     """
     Return coordinated of sources from `catalog` within `search_r_sec` of (`ra`, `dec`)
 
@@ -56,7 +59,7 @@ def search_around(ra, dec, catalog, search_r_sec):
 
 
 def neigbour_df(
-    ra, dec, df,
+    ra: float, dec: float, df: pd.DataFrame,
     ra_cat_column: str, dec_cat_column: str,
     search_r_sec: float
     ):
@@ -97,11 +100,12 @@ def neigbour_df(
 def desi_image_cutout_for_nway(
     nway_df: pd.DataFrame,
     ero_name: str,
-    csc_df: pd.DataFrame = None,
-    xmm_df: pd.DataFrame = None,
+    csc_df: Optional[pd.DataFrame] = None,
+    xmm_df: Optional[pd.DataFrame] = None,
     jpeg: bool = True,
     ):
     """
+    Credits:  M. Belvederskiy 
     Return cutout of DESI image around (`ero_ra`, `ero_dec`)
     
     Obtaining Images and Raw Data:
@@ -327,4 +331,4 @@ def desi_image_cutout_for_nway(
 
     plt.show()
     return fig
-#upd nway, calibration, viewer, cat construction p1
+

@@ -23,6 +23,7 @@ from sklearn.model_selection import GridSearchCV
 from tensorflow import keras
 import tensorflow as tf
 pd.options.mode.chained_assignment = None
+from typing import Tuple, List, Optional, Dict, Callable
 
 set_mpl()
 
@@ -82,9 +83,9 @@ def _add_at(a,index,b):
 
 def make_healpix_map(ra, dec, quantity, nside, mask=None, weight=None, ipix=None, fill_UNSEEN=False, return_w_maps=False, return_extra=False, mode='mean'):
     """
+    source: https://github.com/xuod/castor/blob/master/castor/cosmo.py
     Creates healpix maps of quantity observed at ra, dec (in degrees) by taking
     the mean or sum of quantity in each pixel.
-    source: https://github.com/xuod/castor/blob/master/castor/cosmo.py
     Parameters
     ----------
     ra : array
@@ -226,7 +227,18 @@ def make_healpix_map(ra, dec, quantity, nside, mask=None, weight=None, ipix=None
 #
 
 
-def decode_str_columns(df):
+def decode_str_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    decode_str_columns decodes all string columns in a pandas dataframe
+
+    Args:
+        df (pd.DataFrame): dataframe to decode
+
+    Returns:
+        pd.DataFrame: decoded dataframe
+
+    """
+
     str_df = df.select_dtypes([object])
     str_df = str_df.stack().str.decode('utf-8').unstack()
     for col in str_df:
@@ -257,7 +269,18 @@ def pandas_to_fits(dataframe: pd.DataFrame,
     return None
 
 
-def fits_to_pandas(filename: str, include_data_path = True):
+def fits_to_pandas(filename: str, include_data_path: bool = True) -> pd.DataFrame:
+    """
+    fits_to_pandas reads a fits file and returns a pandas dataframe
+
+    Args:
+        filename (str): filename (with .fits extension)
+        include_data_path (bool, optional): if True, the data_path is added to the filename. Defaults to True.
+
+    Returns:
+        pd.DataFrame: pandas dataframe
+    """
+
     if include_data_path:
         filename = data_path+'/'+filename
     else:
@@ -281,7 +304,18 @@ def fits_to_pandas(filename: str, include_data_path = True):
     return dataframe
 
 
-def my_scaler_forward(df):
+def my_scaler_forward(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    my_scaler_forward: scales the columns of a dataframe according to the following rules:
+        all magnitudes are scaled by 1/35
+        all colors are scaled by 1/10
+        all other columns are not scaled
+    Args:
+        df (pd.DataFrame): dataframe to scale
+
+    Returns:
+        pd.DataFrame: scaled dataframe
+    """
     df_scaled = df.copy()
     for colname in df.columns:
         if 'rel_dered_mag' in colname:
@@ -294,7 +328,18 @@ def my_scaler_forward(df):
             df_scaled[colname] = df[colname]
     return df_scaled
 
-def my_scaler_backward(df_scaled):
+def my_scaler_backward(df_scaled: pd.DataFrame)->pd.DataFrame:
+    """
+    my_scaler_backward unscales the columns of a dataframe which was scaled according to the following rules:
+        all magnitudes are scaled by 1/35
+        all colors are scaled by 1/10
+        all other columns are not scaled
+    Args:
+        df_scaled (pd.DataFrame): dataframe to unscale
+
+    Returns:
+        pd.DataFrame: unscaled dataframe
+    """
     df = df_scaled.copy()
     for colname in df.columns:
         if 'rel_dered_mag' in colname:
@@ -307,7 +352,21 @@ def my_scaler_backward(df_scaled):
     return df
 
 
-def assess_classifier(clf, X_test, y_test, label = 'Validation set', histbins = 30):  
+def assess_classifier(clf, X_test: np.ndarray, y_test: np.ndarray, label: str = 'Validation set', histbins: int = 30) -> Tuple:  
+    """
+    assess_classifier for a given X_test and y_test, plots the purity/completeness (precision/recall) curves and the histogram of the predicted probabilities/
+
+    Args:
+        clf (keras or sklearn model): model of the classifier
+        X_test (np.ndarray): test features
+        y_test (np.ndarray): test labels
+        label (str, optional): label of the test dataset. Defaults to 'Validation set'.
+        histbins (int, optional): number of bins. Defaults to 30.
+
+    Returns:
+        Tuple: optimal decision threshcold (precision=recall), precision and recall on this threshold, histogram of the predicted probabilities as per NWAY format
+    """
+
     try:
         X_test = X_test.to_numpy()
         y_test = y_test.to_numpy()
@@ -322,15 +381,6 @@ def assess_classifier(clf, X_test, y_test, label = 'Validation set', histbins = 
         #add predict_proba for consistency with sklearn
         clf.predict_proba = lambda X: np.vstack((np.ones(X.shape[0]), clf.predict(X, verbose = 0)[:,0])).T
         predict_proba = clf.predict_proba(X_test)[:,1]
-
-
-    # try:
-    #     ax = sns.displot(x = predict_proba, hue = y_test, bins = 50, stat='density')
-    # except:
-    #     y_test = y_test[:,0]
-    #     ax = sns.displot(x = predict_proba, hue = y_test, bins = 50, stat='density')
-    # ax.set(title = label, ylabel  = 'probability density', xlabel = 'classifier predicted probability')
-
 
 
     precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y_test, predict_proba)
@@ -363,35 +413,6 @@ def assess_classifier(clf, X_test, y_test, label = 'Validation set', histbins = 
     ax.text(0.3, 0.15, cm_str, ha='center', va='center', transform=ax.transAxes)
     ax.legend(loc = 'lower right')
 
-
-
-
-
-
-    # fig,  ax =  plt.subplots( figsize = (8,8))
-    # ax.plot(precision, recall, label=label, linewidth=2)
-    # ax.set_xlabel('Precision/completeness')
-    # ax.set_ylabel('Recall/putiry')
-    # plt.grid(True)
-    # ax.set_aspect('equal')
-    # id_optim = np.argmin(np.abs(precision-recall))
-    # threshold_optim = thresholds[id_optim]
-    # precision_optim = precision[id_optim]
-    # recall_optim = recall[id_optim]
-    # print('Optimal threshold: {:.2f}'.format(threshold_optim))
-    # print('Optimal precision: {:.2f}'.format(precision_optim))
-    # ax.plot(precision_optim, recall_optim, 'o', color='C5', label = f"({precision_optim:.2f},{recall_optim:.2f})")
-    # ax.plot([0,1], [0,1], '--', color='C4')
-
-    # cm = sklearn.metrics.confusion_matrix(y_test, predict_proba > threshold_optim)
-
-    # cm_str = f"TN: {cm[0,0]}  FP: {cm[0,1]}\nFN: {cm[1,0]}  TP: {cm[1,1]}"
-    # #add a string version of the confusion matrix, add true positive , false positive  etc labels
-
-    # ax.text(0.3, 0.15, cm_str, ha='center', va='center', transform=ax.transAxes)
-    # ax.legend()
-
-
     y_test = np.reshape(y_test, (-1,))
     bins = np.linspace(0, 1, histbins)
     hist_field, bin_field = np.histogram(predict_proba[y_test==0], bins=bins, density=True)  
@@ -404,10 +425,8 @@ def assess_classifier(clf, X_test, y_test, label = 'Validation set', histbins = 
     plt.xlabel('classifier predicted probability')
     plt.ylabel('probability density')
 
-    #save histograms in one file:
     #with columns lo, hi, selected, others
     hist_df = pd.DataFrame({'lo':bin_field[:-1], 'hi':bin_field[1:], 'selected':hist_ctsp, 'others':hist_field})
-
 
 
     return threshold_optim, precision_optim, recall_optim, hist_df
@@ -417,30 +436,54 @@ def assess_classifier(clf, X_test, y_test, label = 'Validation set', histbins = 
 
 
 
-def plot_metrics(history, metrics = ['loss', 'purity', 'completeness']):
-  for n, metric in enumerate(metrics):
-    name = metric.replace("_"," ").capitalize()
-    plt.figure(figsize=(8,5))
-    try:
-        plt.plot(history.epoch, history.history[metric], label='Train')
-        plt.plot(history.epoch, history.history['val_'+metric], linestyle="--", label='Test')
-    except:
-        plt.plot(history['epoch'], history[metric], label='Train')
-        plt.plot(history['epoch'], history['val_'+metric], linestyle="--", label='Test')
-    plt.xlabel('Epoch')
-    plt.ylabel(name)
+def plot_metrics(history, metrics: list = ['loss', 'purity', 'completeness']):
+    """
+    plot_metrics plots the metrics of the training history (keras or sklearn)
 
-    plt.legend();
+    Args:
+        history: keras history
+        metrics (list, optional): metrics to plot. Defaults to ['loss', 'purity', 'completeness'].
+    """
+    for n, metric in enumerate(metrics):
+        name = metric.replace("_"," ").capitalize()
+        plt.figure(figsize=(8,5))
+        try:
+            plt.plot(history.epoch, history.history[metric], label='Train')
+            plt.plot(history.epoch, history.history['val_'+metric], linestyle="--", label='Test')
+        except:
+            plt.plot(history['epoch'], history[metric], label='Train')
+            plt.plot(history['epoch'], history['val_'+metric], linestyle="--", label='Test')
+        plt.xlabel('Epoch')
+        plt.ylabel(name)
+
+        plt.legend();
 
 
 
-def build_keras_model(input_features_shape,
-                        activation='relu', 
-                        layers_num = (8,8,8),
-                        dropout_rate = 0.0,
-                        initial_bias = None,
-                        lr = 1e-3,
-                        load_weights = True,):
+def build_keras_model(input_features_shape: Tuple,
+                        activation: str='relu', 
+                        layers_num: Tuple = (8,8,8),
+                        dropout_rate: float = 0.0,
+                        initial_bias: Optional[bool] = None,
+                        lr: float = 1e-3,
+                        load_weights: bool = True,) -> Tuple:
+    """
+    build_keras_model builds a keras model
+
+    Args:
+        input_features_shape (Tuple): input features shape
+        activation (str, optional): activation. Defaults to 'relu'.
+        layers_num (Tuple, optional): number of nodes in layers. Defaults to (8,8,8).
+        dropout_rate (float, optional): dropout rate. Defaults to 0.0.
+        initial_bias (Optional[bool], optional): inintial bias. Defaults to None.
+        lr (float, optional): learning rate. Defaults to 1e-3.
+        load_weights (bool, optional): whether to load weights. Defaults to True.
+
+    Returns:
+        Tuple: keras model and early stopping callback
+    """
+    
+
     #initial_bias = np.log([np.sum(y_test)/np.sum(~y_test)])
     #https://www.tensorflow.org/tutorials/structured_data/imbalanced_data
     METRICS = [
@@ -458,8 +501,6 @@ def build_keras_model(input_features_shape,
 
     #recall is TP / (TP + FN) - We know it as purity
     #precision is TP / (TP + FP) - We know it as completeness
-
-
 
     def make_model(metrics=METRICS, output_bias=None):
         if output_bias is not None:
@@ -498,7 +539,34 @@ def build_keras_model(input_features_shape,
 
 
 
-def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_bins_num = 1, features_cols = 'grzw1w2', validation_fraction = 0.3, test_fraction = 0.2, downsample_field_srcs = False, downsample_field_srcs_fraction = 2.0, drop_missing = True, random_state = 42):
+def photo_prior_create_train_test_validation_data(photo_cat_scaled: pd.DataFrame, 
+                                                x_ray_flux_bins_num: int = 1,
+                                                features_cols: str = 'grzw1w2',
+                                                validation_fraction: float = 0.3,
+                                                test_fraction: float = 0.2,
+                                                downsample_field_srcs: bool = False,
+                                                downsample_field_srcs_fraction: float = 2.0,
+                                                drop_missing: bool = True,
+                                                random_state: int = 42) -> Dict:
+    """
+    photo_prior_create_train_test_validation_data creates a train/test/validation data split for prior trainings depending on the data available (for three models)
+
+    Args:
+        photo_cat_scaled (pd.DataFrame): training data
+        x_ray_flux_bins_num (int, optional): number of bins in X-ray flux. Set this to 1 only! Defaults to 1.
+        features_cols (str, optional): one of three models: grzw1w2, grzw1 or grz . Defaults to 'grzw1w2'.
+        validation_fraction (float, optional): fraction of data for validation. Defaults to 0.3.
+        test_fraction (float, optional): fraction of data for test. Defaults to 0.2.
+        downsample_field_srcs (bool, optional): whether to downsample the negative class (label = 0, i.e. field source). Defaults to False.
+        downsample_field_srcs_fraction (float, optional): if yes, the downsampling make the negative class this times larger than positive class. Defaults to 2.0.
+        drop_missing (bool, optional): whether to drop rows with missing data. Defaults to True.
+        random_state (int, optional): random seed. Defaults to 42.
+
+    Returns:
+        Dict: train/test/validation data and some info in a dictionary
+    """
+
+
     if features_cols == 'grzw1w2':
         features_cols = ['rel_dered_mag_g','rel_dered_mag_r','rel_dered_mag_z','rel_dered_mag_w1','rel_dered_mag_w2', 'rel_dered_g_r', 'rel_dered_r_z',  'rel_dered_g_z','rel_dered_z_w1', 'rel_dered_r_w2', 'rel_dered_w1_w2']
     if features_cols == 'grzw1':
@@ -540,14 +608,14 @@ def photo_prior_create_train_test_validation_data(photo_cat_scaled, x_ray_flux_b
     output_dict = {}
 
     for i in range(x_ray_flux_bins_num):
-        data_validation = photo_cat_validation[photo_cat_validation.x_ray_flux_bin == i]
+        data_validation = photo_cat_validation[photo_cat_validation['x_ray_flux_bin'] == i]
 
         X_val = data_validation[features_cols]
         y_val = data_validation[target_col]
         
 
 
-        data = photo_cat_train_test[photo_cat_train_test.x_ray_flux_bin == i]
+        data = photo_cat_train_test[photo_cat_train_test['x_ray_flux_bin'] == i]
 
         n_ctsp = data[data.is_counterpart==1].shape[0]
         n_field = data[data.is_counterpart==0].shape[0]
@@ -614,7 +682,8 @@ def save_keras_classifier(model, hist_df, model_name):
 
 
 
-def find_completeness_purity_intercept(cutoffs, completeness, purity):
+def find_completeness_purity_intercept(cutoffs: np.ndarray, completeness: np.ndarray, purity: np.ndarray):
+    """ Find the completeness and purity at the intersection of the completeness and purity curves."""
 
     cutoff_intersection_id = np.argmin(np.abs(completeness[completeness>0] - purity[completeness>0]))
     cutoff_intersection = cutoffs[completeness>0][cutoff_intersection_id]
@@ -631,13 +700,29 @@ def find_completeness_purity_intercept(cutoffs, completeness, purity):
 
 
 
-def assess_goodnes_of_cross_match(match_df,
-                                 match_flag_col='nway_match_flag',
-                                 candidate_col = 'desi_id',
-                                 true_ctps_col = 'desi_id_true',
-                                 calib_col = 'nway_prob_has_match',
-                                 plot_res = True,
-                                 p_any_cut = None):
+def assess_goodnes_of_cross_match(match_df: pd.DataFrame,
+                                 match_flag_col: str='nway_match_flag',
+                                 candidate_col: str = 'desi_id',
+                                 true_ctps_col: str = 'desi_id_true',
+                                 calib_col: str = 'nway_prob_has_match',
+                                 plot_res: bool = True,
+                                 p_any_cut: Optional[float] = None) -> Tuple:
+    """
+    assess_goodnes_of_cross_match shows the identification matrics for a range of cutoffs: cutoff, overall putiry, completeness, purity, completeness (for hostless), purity (for hostless), all at a given cutoff
+
+    Args:
+        match_df (pd.DataFrame): catalog with cross-match results and true id of counterpart (or if is is hostless)
+        match_flag_col (str, optional): flag to filter selected counterparts based on cross-match (e.g. the one with highest p_i). Defaults to 'nway_match_flag'.
+        candidate_col (str, optional): column name with id of predicted counterpart. Defaults to 'desi_id'.
+        true_ctps_col (str, optional): column name with id of true counterpart. Defaults to 'desi_id_true'.
+        calib_col (str, optional): parameter to calibrate cutoffs. Defaults to 'nway_prob_has_match'.
+        plot_res (bool, optional): whether to plot resulting curves. Defaults to True.
+        p_any_cut (Optional[float], optional): whether to apply some cut beforehand (print statistics there). Defaults to None.
+
+    Returns:
+        Tuple: see above 
+    """
+
 
     match_df_orig  = match_df.copy()
     match_df = match_df.copy()
@@ -774,7 +859,7 @@ def assess_goodnes_of_cross_match(match_df,
 
 
 def flux2mag(flux):
-
+    #converts flux to magnitude
     return 22.5 - 2.5 * np.log10(flux)
 
 def flux_nmagg2vega_mag(flux:pd.Series,
@@ -793,6 +878,8 @@ def flux_nmagg2vega_mag(flux:pd.Series,
         delta_m = 5.174
     elif mode=='w4':
         delta_m = 6.620
+    else:
+        raise ValueError('Mode must be one of w1, w2, w3, w4')
     
     vega_flux = flux * 10 ** (delta_m / 2.5)
     vega_mag = flux2mag(vega_flux)
@@ -813,7 +900,7 @@ def flux_frequency_correction(magnitudes: pd.Series,
         w_eff (float): width of the effective wavelength.
         ab_zeropoint (float): Zero Point in AB System.
     Returns:
-        pd.Series: _description_
+        pd.Series: corrected flux
     """
 
     flux = w_eff * ab_zeropoint * 10 ** (-0.4 * magnitudes)
@@ -957,21 +1044,30 @@ def desi_reliable_magnitudes(df: pd.DataFrame,
 
 
 
-def rayleigh_plot(input_cross_match_df, sep_col = 'sep', pos_err_col = 'pos_err',
-    pos_err_corr_func = lambda x: x, corr_error_str='err*1.0', plotlabel = 'eROSITAx',
-    ylim=(1e-3, 1)): 
-    '''
-    input_cross_match_df - dataframe with cross-matched catalog 1 with catalog 2.
-    all cuts and queries should be done before calling this function.
-    '''
-    input_cross_match_df = input_cross_match_df.copy()
-    pos_err = pos_err_corr_func(input_cross_match_df[pos_err_col])
-    corrected_pos_err = pos_err
+def rayleigh_plot(input_cross_match_df: pd.DataFrame,  
+                    sep_col: str = 'sep', pos_err_col: str = 'pos_err',
+                    plotlabel: str = 'eROSITA',
+                    ylim: Tuple=(1e-3, 1)): 
+    """
+    rayleigh_plot make a plot of distirubtion of separation divided by positional error, which is expected to be Rayleigh distributed (0, 1).
+    all cuts and queries on the primary catalog (e.g. Detection Likelihood) should be done before calling this function.
+    Args:
+        input_cross_match_df (pd.DataFrame): Input dataframe with cross-matched catalog 1 (e.g measured positions with eROSITA) with catalog 2 (true positions, e.g. DESI counterparts).
+        sep_col (str, optional): name of the columns with separation between the two. Defaults to 'sep'.
+        pos_err_col (str, optional): column with positional error (1 sigma). Defaults to 'pos_err'.
+        plotlabel (str, optional): Label of the plot. Defaults to 'eROSITA'.
+        ylim (Tuple, optional): Limits on y axis. Defaults to (1e-3, 1).
+    """
 
-    rat = input_cross_match_df[sep_col]/corrected_pos_err
+
+    input_cross_match_df = input_cross_match_df.copy()
+
+
+
+    rat = input_cross_match_df[sep_col]/input_cross_match_df[pos_err_col]
     input_cross_match_df['rat'] = rat
     rayleigh_fit = stats.rayleigh.fit(rat)
-    #sns.histplot(ero_ctps_tmp, x = rat, bins=50, stat = 'density', ax = ax)
+
 
     fig, axs =  plt.subplots(nrows=2, ncols = 1, sharex = True, gridspec_kw = {'hspace':0, 'height_ratios': None}, figsize = (12,12))
     ax, ax2 = axs
@@ -989,7 +1085,6 @@ def rayleigh_plot(input_cross_match_df, sep_col = 'sep', pos_err_col = 'pos_err'
     ax.plot(x, 1-stats.rayleigh.cdf(x, *rayleigh_fit), 'r-', lw=3, alpha=0.6, label='Rayleigh fit: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % rayleigh_fit, zorder = -1)
     ax.plot(x, 1-stats.rayleigh.cdf(x, 0,1), 'g-', lw=3, alpha=0.6, label='Rayleigh fixed: '+'$\mu$ = %.2f, $\sigma$ = %.2f' % (0,1), zorder = -1)
     ax.set(ylim=ylim)
-    #ax2.set_xlabel('Separation/corrected_pos_err; \n '+ 'corr_error='+corr_error_str)
     ax2.set_xlabel('Separation/pos_err')
     ax.set_yscale('log')
 
@@ -1000,10 +1095,25 @@ def rayleigh_plot(input_cross_match_df, sep_col = 'sep', pos_err_col = 'pos_err'
     plt.suptitle(plotlabel+', '+str(len(input_cross_match_df))+' sources')
 
 
-def add_separation_columns(df, 
+def add_separation_columns(df: pd.DataFrame, 
                             colname_ra1: str, colname_dec1: str,
                             colname_ra2: str, colname_dec2: str,
-                            colname = 'sep'):
+                            colname: str = 'sep') -> pd.DataFrame:
+    """
+    add_separation_columns adds a column with separation between two sets of coordinates in degrees in one dataframe (e.g. dataframe with X-ray coordinates and the coordinates of counterparts)
+
+    Args:
+        df (pd.DataFrame): Dataframe with both coordinates
+        colname_ra1 (str): columns name for RA of the first set of coordinates, in degrees
+        colname_dec1 (str): --||-- DEC --||--
+        colname_ra2 (str): --||-- RA --||-- of the second set of coordinates, in degrees
+        colname_dec2 (str): --||-- DEC --||--
+        colname (str, optional): name of separation column to add to the dataframe. Defaults to 'sep'.
+
+    Returns:
+        pd.DataFrame: modified version of dataframe
+    """
+
     df = df.copy()
 
 
@@ -1027,7 +1137,7 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
                             match_radius: float = 3.0,
                             df_prefix: str = '',
                             closest: bool = False,
-                            ):
+                            ) -> pd.DataFrame:
     """
     cross_match_data_frames cross-matches two dataframes.
     Cross-match two dataframes with astropy
@@ -1036,12 +1146,12 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
     Args:
         df1 (pd.DataFrame): first catalog
         df2 (pd.DataFrame): second catalog
-        colname_ra1 (str): columns name for ra in df1
-        colname_dec1 (str): columns name for dec in df1
-        colname_ra2 (str): columns name for ra in df2
-        colname_dec2 (str): columns name for dec in df2
+        colname_ra1 (str): columns name for ra in df1, in degrees
+        colname_dec1 (str): columns name for dec in df1, in degrees
+        colname_ra2 (str): columns name for ra in df2, in degrees
+        colname_dec2 (str): columns name for dec in df2, in degrees
         match_radius (float, optional): match radius in arcsec. Defaults to 3.0.
-        df_prefix (str, optional): prefix to prepend to the columns of the second data frame. Defaults to ''. If exists, '_' is appended.
+        df_prefix (str, optional): prefix to prepend to the columns of the second data frame. Defaults to ''. If not '', '_' is prepended.
         closest (bool, optional): whether to return the closest match. Defaults to False.
 
     Returns:
@@ -1058,8 +1168,8 @@ def cross_match_data_frames(df1: pd.DataFrame, df2: pd.DataFrame,
 
     example:
     cross_match_data_frames(desi, gaia, 
-                                colname_ra1='RA_fin',
-                                colname_dec1='DEC_fin',
+                                colname_ra1='RA',
+                                colname_dec1='DEC',
                                 colname_ra2='ra',
                                 colname_dec2='dec',
                                 match_radius = 10,
@@ -1137,7 +1247,8 @@ def search_around_r_data_frames(df1: pd.DataFrame, target_ra: float, target_dec:
                             colname_ra1: str, colname_dec1: str,
                             match_radius: float = 3.0,
                             closest: bool = False,
-                            ):
+                            ) -> pd.DataFrame:
+    """the same as cross_match_data_frames but for a single target (target_ra, target_dec)"""
 
     df2 = pd.DataFrame({'RA': [target_ra], 'DEC': [target_dec]})
     df_matched = cross_match_data_frames(df1, df2,
@@ -1153,14 +1264,29 @@ def search_around_r_data_frames(df1: pd.DataFrame, target_ra: float, target_dec:
     return df_matched                  
 
 
-
-
 def prepare_nway_results(nway_res_orig: pd.DataFrame,
-                        ero_for_nway_fits = "ERO_lhpv_03_23_sd01_a15_g14.fits",
-                        desi_for_nway_fits = "desi_lh.fits",
-                        ero_full_cat = 'ERO_lhpv_03_23_sd01_a15_g14.pkl',
-                        desi_full_cat = 'desi_lh.gz_pkl',
-                        ero_desi_ctps_file = 'validation_ctps_ero_desi_lh.csv'):
+                        ero_for_nway_fits: str = "ERO_lhpv_03_23_sd01_a15_g14.fits",
+                        desi_for_nway_fits: str = "desi_lh.fits",
+                        ero_full_cat: str = 'ERO_lhpv_03_23_sd01_a15_g14.pkl',
+                        desi_full_cat: str = 'desi_lh.gz_pkl',
+                        ero_desi_ctps_file: str = 'validation_ctps_ero_desi_lh.csv') -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    prepare_nway_results process results from NWAY output and prepares the final result of cross-match.
+    If the true match is known and NWAY is incorrect, the true match is added to the result instead of the NWAY match!
+
+    Args:
+        nway_res_orig (pd.DataFrame): dataFrame with NWAY results
+        ero_for_nway_fits (str, optional): fits file used as NWAY input for X-ray catalog. Defaults to "ERO_lhpv_03_23_sd01_a15_g14.fits".
+        desi_for_nway_fits (str, optional): fits file used as NWAY input for the secondary catalog (DESI LIS). Defaults to "desi_lh.fits".
+        ero_full_cat (str, optional): Full x-ray catalog, to append X-ray properties to the results. Defaults to 'ERO_lhpv_03_23_sd01_a15_g14.pkl'.
+        desi_full_cat (str, optional): Full optical catalog to append optical properties to the result. Defaults to 'desi_lh.gz_pkl'.
+        ero_desi_ctps_file (str, optional): File with a list of true counterparts to x-ray sources (e.g. DESI counterparts and hostless sources). Defaults to 'validation_ctps_ero_desi_lh.csv'.
+
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame]: data frame of results for all matches and data frame of results for the best match
+    """
+
+
     nway_res_orig = nway_res_orig.copy()
     nway_res_orig = nway_res_orig[nway_res_orig.DESI!=-1] #nway puts a row with DESI = -1 for every source of the primary match
 
@@ -1180,7 +1306,7 @@ def prepare_nway_results(nway_res_orig: pd.DataFrame,
 
 
 
-    #add a prefix nway_ to the column woth match parameters
+    #add a prefix nway_ to the column with match parameters
     nway_res = nway_res_orig.rename(columns={c: 'nway_'+c for c in nway_res_orig.
     columns if c not in ['EROSITA', 'DESI']})
 
