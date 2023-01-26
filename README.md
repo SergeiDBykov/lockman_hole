@@ -1,7 +1,7 @@
 # Optical identification of X-ray sources in the SRG/eROSITA survey of Lockman Hole
 
 
-These are scripts and notebooks which are used to identify optical counterparts for X-ray sources detected in the SRG/eROSITA Lockman Hole survey (Gilfanov et al. 2023)
+These are scripts and notebooks which are used to identify optical counterparts for X-ray sources detected in the SRG/eROSITA Lockman Hole survey (Bykov, Belvederskiy, Gilfanov 2022).
 
 The analysis results I used in my [paper](). Necessary python packages: `numpy`, `scipy`, `matplotlib`, `seaborn`, `pandas`, `astropy`, `sklearn`, `tensorflow` (`keras`), `tqdm`, [`nway`](https://github.com/SergeiDBykov/nway).
 
