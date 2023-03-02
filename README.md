@@ -3,7 +3,7 @@
 
 These are scripts and notebooks which are used to identify optical counterparts for X-ray sources detected in the SRG/eROSITA Lockman Hole survey (Bykov, Belvederskiy, Gilfanov 2022).
 
-The analysis results I used in my [paper](). Necessary python packages: `numpy`, `scipy`, `matplotlib`, `seaborn`, `pandas`, `astropy`, `sklearn`, `tensorflow` (`keras`), `tqdm`, [`nway`](https://github.com/SergeiDBykov/nway).
+The analysis results I used in my [paper](https://arxiv.org/abs/2302.13689). Necessary python packages: `numpy`, `scipy`, `matplotlib`, `seaborn`, `pandas`, `astropy`, `sklearn`, `tensorflow` (`keras`), `tqdm`, [`nway`](https://github.com/SergeiDBykov/nway).
 
 Note that the data (e.g. from Chandra, XMM, DESI) is not included and needed to be downloaded separately. eROSITA data from Lockman Hole will be available in the future. All data should be placed in `./0_data` folder
 
